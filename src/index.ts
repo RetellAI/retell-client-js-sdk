@@ -1,26 +1,19 @@
 // retell-client-sdk.ts
 import {
     AudioWsClient,
-    RetellClient,
     convertFloat32ToUint8,
     convertUint8ToFloat32,
 } from "retell-sdk";
-import {
-    AudioEncoding,
-    AudioWebsocketProtocol,
-} from "retell-sdk/models/components/calldetail";
 
 interface StartConversationConfig {
-    agentId: string;
+    callId: string;
     sampleRate?: number;
-    audioEncoding?: AudioEncoding;
     customStream?: MediaStream | null;
 }
 
 type EventListener = (data?: any) => void;
 
 export class RetellClientSdk {
-    private retell: RetellClient;
     private liveClient: AudioWsClient | null = null;
     private audioContext: AudioContext | null = null;
     private isCalling: boolean = false;
@@ -34,25 +27,13 @@ export class RetellClientSdk {
         onError: [],
     };
 
-    constructor(apiKey: string) {
-        this.retell = new RetellClient({
-            apiKey: apiKey,
-        });
+    constructor() {
     }
 
-    public async startConversation({ agentId, sampleRate = 22050, audioEncoding = AudioEncoding.S16le, customStream = null }: StartConversationConfig): Promise<void> {
+    public async startConversation({ callId, sampleRate = 22050, customStream = null }: StartConversationConfig): Promise<void> {
         try {
             await this.setupAudio(sampleRate, customStream);
-            const res = await this.retell.registerCall({
-                agentId,
-                audioWebsocketProtocol: AudioWebsocketProtocol.Web,
-                audioEncoding,
-                sampleRate,
-            });
-            if (!res || !res.callDetail) {
-                throw new Error('Register call failed');
-            }
-            this.liveClient = new AudioWsClient(res.callDetail.callId);
+            this.liveClient = new AudioWsClient(callId);
             this.handleAudioEvents();
             this.isCalling = true;
             this.audioContext!.resume();

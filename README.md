@@ -14,7 +14,7 @@ In your web applicaiton project, install the SDK
 ```javascript
 import { RetellClientSdk } from "retell-client-js-sdk";
 
-const sdk = new RetellClientSdk("YOUR_RETELL_API_KEY");
+const sdk = new RetellClientSdk();
 
 
 // Setup event listeners
@@ -24,29 +24,27 @@ sdk.on("onConversationStarted", () => {
 
 sdk.on("onConversationEnded", () => {
     console.log("Conversation ended");
-}
+});
 
 sdk.on("onError", (error) => {
     console.error("An error occurred:", error);
 });
 
 // Open the mic and create conversation with the agent
+// Your server can get the callId using this API: https://docs.re-tell.ai/api-references/post-register-call
 sdk.startConversation({
-        "YOUR_AGENT_ID",
+        callId,
 });
 
 // Advanced parameters
 sdk.startConversation({
-        agentId: agentId,
+        callId: callId,
         sampleRate: 44000,  // You can specify a samping rate receiving from the server and playing at your client
-        audioEncoding: AudioEncoding.S16le, // We don't recommend changing this parameter
         customStream: yourStream, // You can use your own MediaStream which might use a different mic
 }
 
 // Stop the conversation
-sdk.stopConversation({
-        "YOUR_AGENT_ID",
-});
+sdk.stopConversation();
 ```
 
 More details on how to use the SDK can be found in this react demo: https://github.com/adam-team/retell-frontend-reactjs-demo/blob/client_sdk/src/App.tsx 
