@@ -39,7 +39,7 @@ sdk.startConversation({
 // Advanced parameters
 sdk.startConversation({
         callId: callId,
-        sampleRate: 44000,  // You can specify a samping rate receiving from the server and playing at your client
+        sampleRate: 44100,  // You can specify a samping rate receiving from the server and playing at your client
         customStream: yourStream, // You can use your own MediaStream which might use a different mic
 }
 
