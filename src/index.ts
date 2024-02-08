@@ -133,6 +133,11 @@ export class RetellClientSdk {
             this.stopConversation();
             this.triggerEvent('onConversationEnded', { code, reason });
         });
+
+        this.liveClient.on("clear", () => {
+            this.audioData = [];
+            this.audioDataIndex = 0;
+        });
     }
 
     private triggerEvent(eventName: string, data?: any): void {
