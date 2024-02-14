@@ -113,7 +113,7 @@ In update, we will provide the update such as transcript. It will be the transcr
 ]
 ```
 
-```
+
 Check out the code at [React Demo on GitHub](https://github.com/adam-team/retell-frontend-reactjs-demo/) for a practical example. All code in this guide is from this repository.
 
 If you have not worked with audio bytes before, we stronly suggest you to check
@@ -123,4 +123,3 @@ best configuration here.
 PCM audio format conversion functions `convertUnsigned8ToFloat32` and
 `convertFloat32ToUnsigned8` can be found in
 [audio basics](/knowledge/audio-basics#pcm-audio-representation), and is available in Node SDK.
-```
