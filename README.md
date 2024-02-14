@@ -63,13 +63,13 @@ sdk.on("error", (error) => {
 });
 
 // Update message such as transcript
-webClient.on("update", (update) => {
+sdk.on("update", (update) => {
     // Print live transcript as needed
     console.log("update", update);
 });
 
 // When the client receives the audio from server to play
-webClient.on("audio", (audio: Uint8Array) => {
+sdk.on("audio", (audio: Uint8Array) => {
     console.log("There is audio");
 });
 ```
