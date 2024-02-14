@@ -1,6 +1,6 @@
 {
   "name": "retell-client-js-sdk",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "",
   "main": "dist/index.js",
   "module": "dist/index.m.js",

@@ -22,19 +22,10 @@ Your client code should call your server endpoint which calls [register call](ht
 sdk.startConversation({
   callId: registerCallResponse.call_id,
   sampleRate: registerCallResponse.sample_rate
+  enableUpdate: true, // (Optional) You want to receive the update event such as transcript
+  customStream: yourStream, // (Optional) You can use your own MediaStream which might use a different mic
 });
 ```
-
-```javascript
-// Advanced parameters
-sdk.startConversation({
-        callId: callId,
-        sampleRate: 44100,  // Your server will call `register-call` with the sample_rate, then return the sample rate to the client
-        enableUpdate: true, // You want to receive the update event such as transcript
-        customStream: yourStream, // You can use your own MediaStream which might use a different mic
-});
-```
-
 
 ### Stop the conversation
 
@@ -76,41 +67,72 @@ sdk.on("audio", (audio: Uint8Array) => {
 
 ## Advanced
 
-If you would like show animatioh according to user speech or agent speech, you can utilize `update` event.
+If you would like show animation according to user speech or agent speech, you can utilize `update` event.
 
 In update, we will provide the update such as transcript. It will be the transcript for both user and agent in an incremental way. For example, during the conversation it will print:
 
 
 ```javascript
-[
-{role: 'agent', content: 'Hey there, '}
-]
+{
+  "transcript": [
+    {
+      "role": "agent",
+      "content": "Hey there,"
+    }
+  ]
+}
 ```
 
 ```javascript
-[
-{role: 'agent', content: 'Hey there, I\'m'}
-]
+{
+  "transcript": [
+    {
+      "role": "agent",
+      "content": "Hey there, I\'m"
+    }
+  ]
+}
 ```
 
 ```javascript
-[
-{role: 'agent', content: 'Hey there, I\'m your personal AI therapist'}
-]
+{
+  "transcript": [
+    {
+      "role": "agent",
+      "content": "Hey there, I\'m your personal AI therapist"
+    }
+  ]
+}
 ```
 
 ```javascript
-[
-{role: 'agent', content: 'Hey there, I\'m your personal AI therapist'},
-{role: 'user', content: 'Hey, '}
-]
+{
+  "transcript": [
+    {
+      "role": "agent",
+      "content": "Hey there, I\'m your personal AI therapist"
+    },
+    {
+      "role": "user",
+      "content": "Hey, "
+    },
+  ]
+}
 ```
 
 ```javascript
-[
-{role: 'agent', content: 'Hey there, I\'m your personal AI therapist'},
-{role: 'user', content: 'Hey, how are you?'}
-]
+{
+  "transcript": [
+    {
+      "role": "agent",
+      "content": "Hey there, I\'m your personal AI therapist"
+    },
+    {
+      "role": "user",
+      "content": "Hey, how are you?"
+    },
+  ]
+}
 ```
 
 
