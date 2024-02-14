@@ -1,15 +1,3 @@
-<Tip>
-Check out the code at [React Demo on GitHub](https://github.com/adam-team/retell-frontend-reactjs-demo/) for a practical example. All code in this guide is from this repository.
-</Tip>
-
-If you have not worked with audio bytes before, we stronly suggest you to check
-out [audio basics](/knowledge/audio-basics), which can help with choosing the
-best configuration here.
-
-PCM audio format conversion functions `convertUnsigned8ToFloat32` and
-`convertFloat32ToUnsigned8` can be found in
-[audio basics](/knowledge/audio-basics#pcm-audio-representation), and is available in Node SDK.
-
 ### Set up the SDK
 
 Step 1: Install the Client JS SDK
@@ -115,4 +103,16 @@ In update, we will provide the update such as transcript. It will be the transcr
 {role: 'agent', content: 'Hey there, I\'m your personal AI therapist'},
 {role: 'user', content: 'Hey, how are you?'}
 ]
+```
+
+```
+Check out the code at [React Demo on GitHub](https://github.com/adam-team/retell-frontend-reactjs-demo/) for a practical example. All code in this guide is from this repository.
+
+If you have not worked with audio bytes before, we stronly suggest you to check
+out [audio basics](/knowledge/audio-basics), which can help with choosing the
+best configuration here.
+
+PCM audio format conversion functions `convertUnsigned8ToFloat32` and
+`convertFloat32ToUnsigned8` can be found in
+[audio basics](/knowledge/audio-basics#pcm-audio-representation), and is available in Node SDK.
 ```
