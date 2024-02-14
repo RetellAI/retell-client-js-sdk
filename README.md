@@ -18,9 +18,6 @@ Your client code should call your server endpoint which calls [register call](ht
 
 ### Start the conversation
 
-
- to get a `call id` and pass to the client
-
 ```javascript
 sdk.startConversation({
   callId: registerCallResponse.call_id,
@@ -64,13 +61,24 @@ sdk.on("conversationEnded", () => {
 sdk.on("error", (error) => {
     console.error("An error occurred:", error);
 });
+
+// Update message such as transcript
+webClient.on("update", (update) => {
+    // Print live transcript as needed
+    console.log("update", update);
+});
+
+// When the client receives the audio from server to play
+webClient.on("audio", (audio: Uint8Array) => {
+    console.log("There is audio");
+});
 ```
 
 ## Advanced
 
 If you would like show animatioh according to user speech or agent speech, you can utilize `update` event.
 
-In update, we will provide the update such as transcript. It will be the transcript for both user and agent in an incremental way. For example, during the conversation it will print
+In update, we will provide the update such as transcript. It will be the transcript for both user and agent in an incremental way. For example, during the conversation it will print:
 
 
 ```javascript
