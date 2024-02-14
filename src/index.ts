@@ -89,7 +89,9 @@ export class RetellWebClient extends EventEmitter {
     console.log("Audio worklet setup");
 
     this.audioNode.port.onmessage = (e) => {
-      this.liveClient.send(e.data);
+        if (this.liveClient != null) {
+            this.liveClient.send(e.data);
+        }
     };
 
     const source = this.audioContext.createMediaStreamSource(this.stream);
@@ -99,9 +101,8 @@ export class RetellWebClient extends EventEmitter {
 
   private handleAudioEvents(): void {
     // Exposed
-
     this.liveClient.on("open", () => {
-      this.emit("open");
+      this.emit("conversationStarted");
     });
 
     this.liveClient.on("audio", (audio: Uint8Array) => {
@@ -120,7 +121,7 @@ export class RetellWebClient extends EventEmitter {
       if (this.isCalling) {
         this.stopConversation();
       }
-      this.emit("close", { code, reason });
+      this.emit("conversationEnded", { code, reason });
     });
 
     this.liveClient.on("update", (update) => {
