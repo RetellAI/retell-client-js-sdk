@@ -52,6 +52,7 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
       // Playback
       const output = outputs[0];
       const outputChannel1 = output[0];
+      const outputChannel2 = output[1];
       // start playback.
       for (let i = 0; i < outputChannel1.length; ++i) {
         if (this.audioData.length > 0) {
