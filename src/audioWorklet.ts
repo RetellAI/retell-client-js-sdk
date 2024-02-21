@@ -46,6 +46,7 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
       // Capture
       const input = inputs[0];
       const inputChannel1 = input[0];
+      const inputChannel2 = input[1];
       this.port.postMessage(this.convertFloat32ToUint8(inputChannel1));
   
       // Playback
@@ -55,6 +56,7 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
       for (let i = 0; i < outputChannel1.length; ++i) {
         if (this.audioData.length > 0) {
           outputChannel1[i] = this.audioData[0][this.index];
+          outputChannel2[i] = this.audioData[0][this.index];
           this.index++;
           if (this.index == this.audioData[0].length) {
             this.audioData.shift();
@@ -62,6 +64,7 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
           }
         } else {
           outputChannel1[i] = 0;
+          outputChannel2[i] = 0;
         }
       }
   

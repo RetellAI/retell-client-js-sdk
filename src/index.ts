@@ -89,9 +89,9 @@ export class RetellWebClient extends EventEmitter {
     console.log("Audio worklet setup");
 
     this.audioNode.port.onmessage = (e) => {
-        if (this.liveClient != null) {
-            this.liveClient.send(e.data);
-        }
+      if (this.liveClient != null) {
+        this.liveClient.send(e.data);
+      }
     };
 
     const source = this.audioContext.createMediaStreamSource(this.stream);
