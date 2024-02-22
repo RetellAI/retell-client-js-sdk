@@ -16,9 +16,12 @@ export class RetellWebClient extends EventEmitter {
   private isCalling: boolean = false;
   private stream: MediaStream;
   private audioNode: AudioWorkletNode;
+  private customEndpoint: string;
 
-  constructor() {
+  constructor(customEndpoint?: string) {
     super();
+
+    if (customEndpoint) this.customEndpoint = customEndpoint;
   }
 
   public async startConversation(
@@ -32,6 +35,7 @@ export class RetellWebClient extends EventEmitter {
       this.liveClient = new AudioWsClient({
         callId: startConversationConfig.callId,
         enableUpdate: startConversationConfig.enableUpdate,
+        customEndpoint: this.customEndpoint,
       });
       this.handleAudioEvents();
       this.isCalling = true;
