@@ -11,9 +11,15 @@ export declare class RetellWebClient extends EventEmitter {
     private isCalling;
     private stream;
     private audioNode;
-    constructor();
+    private customEndpoint;
+    private captureNode;
+    private audioData;
+    private audioDataIndex;
+    constructor(customEndpoint?: string);
     startConversation(startConversationConfig: StartConversationConfig): Promise<void>;
     stopConversation(): void;
-    private setupAudio;
     private handleAudioEvents;
+    private setupAudioPlayback;
+    private isAudioWorkletSupported;
+    private playAudio;
 }
