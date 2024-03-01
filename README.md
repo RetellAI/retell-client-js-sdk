@@ -67,6 +67,8 @@ sdk.on("audio", (audio: Uint8Array) => {
 
 ## Advanced
 
+### Transcript
+
 If you would like show animation according to user speech or agent speech, you can utilize `update` event.
 
 In update, we will provide the update such as transcript. It will be the transcript for both user and agent in an incremental way. For example, during the conversation it will print:
@@ -133,6 +135,24 @@ In update, we will provide the update such as transcript. It will be the transcr
     },
   ]
 }
+```
+
+
+### Disconnection
+
+If the internet is bad and users are disconnected, we will send you the disconnect event. Our SDK will auto handle the reconnection and will send you the reconnect event.
+
+You can control the server alive timeframe by setting `end_call_after_silence_ms`. ([docs](https://docs.retellai.com/api-references/register-call))
+
+```javascript
+
+sdk.on("disconnect", () => {
+    console.log("disconnect");
+});
+
+sdk.on("reconnect", () => {
+    console.log("reconnect");
+});
 ```
 
 

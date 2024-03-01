@@ -11,6 +11,8 @@ export interface AudioWsConfig {
 
 export class AudioWsClient extends EventEmitter {
   private ws: WebSocket;
+  private pingTimeout: ReturnType<typeof setTimeout> | null = null;
+  private wasDisconnected: boolean = false;
 
   constructor(audioWsConfig: AudioWsConfig) {
     super();
@@ -27,12 +29,21 @@ export class AudioWsClient extends EventEmitter {
 
     this.ws.onopen = () => {
       this.emit("open");
+      this.resetPingTimeout();
     };
 
     this.ws.onmessage = (event) => {
       // Check if the data is a string (text data)
       if (typeof event.data === "string") {
-        if (event.data === "clear") {
+        if (event.data === "ping") {
+          if (this.wasDisconnected) {
+            this.emit("reconnect");
+            this.wasDisconnected = false; // Reset the flag upon receiving a ping after a disconnect
+          }
+          this.emit("ping");
+          this.resetPingTimeout();
+        }
+        else if (event.data === "clear") {
           this.emit("clear");
         } else {
           // Handle json update data
@@ -41,7 +52,7 @@ export class AudioWsClient extends EventEmitter {
             this.emit("update", update);
           } catch (err) {
             this.emit("error", "Error parsing JSON update from server.");
-            this.ws.close(1002, "Error parsing JSON update from server.");
+            this.ws.close(1000, "Error parsing JSON update from server.");
           }
         }
       } else if (event.data instanceof ArrayBuffer) {
@@ -59,6 +70,15 @@ export class AudioWsClient extends EventEmitter {
     this.ws.onerror = (event) => {
       this.emit("error", event.error);
     };
+  }
+
+  resetPingTimeout() {
+    if (this.pingTimeout) {
+      clearTimeout(this.pingTimeout);
+    }
+    this.pingTimeout = setTimeout(() => {
+      this.wasDisconnected = true;
+    }, 5500);
   }
 
   send(audio: Uint8Array) {

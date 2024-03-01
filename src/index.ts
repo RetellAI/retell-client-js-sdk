@@ -87,6 +87,14 @@ export class RetellWebClient extends EventEmitter {
       this.emit("audio", audio);
     });
 
+    this.liveClient.on("disconnect", () => {
+      this.emit("disconnect");
+    });
+
+    this.liveClient.on("reconnect", () => {
+      this.emit("reconnect");
+    });
+
     this.liveClient.on("error", (error) => {
       this.emit("error", error);
       if (this.isCalling) {
