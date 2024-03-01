@@ -51,8 +51,7 @@ export class AudioWsClient extends EventEmitter {
             const update = JSON.parse(event.data);
             this.emit("update", update);
           } catch (err) {
-            this.emit("error", "Error parsing JSON update from server.");
-            this.ws.close(1000, "Error parsing JSON update from server.");
+            console.log(err);
           }
         }
       } else if (event.data instanceof ArrayBuffer) {
@@ -60,8 +59,7 @@ export class AudioWsClient extends EventEmitter {
         const audio = new Uint8Array(event.data);
         this.emit("audio", audio);
       } else {
-        this.emit("error", "Got unknown message from server.");
-        this.ws.close(1002, "Got unknown message from server.");
+       console.log("error", "Got unknown message from server.");
       }
     };
     this.ws.onclose = (event) => {
