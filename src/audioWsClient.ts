@@ -12,7 +12,9 @@ export interface AudioWsConfig {
 export class AudioWsClient extends EventEmitter {
   private ws: WebSocket;
   private pingTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pingInterval: ReturnType<typeof setInterval> | null = null;
   private wasDisconnected: boolean = false;
+  private pingIntervalTime: number = 5000;
 
   constructor(audioWsConfig: AudioWsConfig) {
     super();
@@ -29,19 +31,18 @@ export class AudioWsClient extends EventEmitter {
 
     this.ws.onopen = () => {
       this.emit("open");
-      this.resetPingTimeout();
+      this.startPingPong();
     };
 
     this.ws.onmessage = (event) => {
-      // Check if the data is a string (text data)
+
       if (typeof event.data === "string") {
-        if (event.data === "ping") {
+        if (event.data === "pong") {
           if (this.wasDisconnected) {
             this.emit("reconnect");
-            this.wasDisconnected = false; // Reset the flag upon receiving a ping after a disconnect
+            this.wasDisconnected = false;
           }
-          this.emit("ping");
-          this.resetPingTimeout();
+          this.adjustPingFrequency(5000); // Reset ping frequency to 5 seconds
         }
         else if (event.data === "clear") {
           this.emit("clear");
@@ -59,24 +60,62 @@ export class AudioWsClient extends EventEmitter {
         const audio = new Uint8Array(event.data);
         this.emit("audio", audio);
       } else {
-       console.log("error", "Got unknown message from server.");
+        console.log("error", "Got unknown message from server.");
       }
     };
     this.ws.onclose = (event) => {
+      this.stopPingPong();
       this.emit("close", event.code, event.reason);
     };
     this.ws.onerror = (event) => {
+      this.stopPingPong();
       this.emit("error", event.error);
     };
   }
 
+  startPingPong() {
+    this.pingInterval = setInterval(() => this.sendPing(), this.pingIntervalTime);
+    this.resetPingTimeout();
+  }
+
+  sendPing() {
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send("ping");
+    }
+  }
+
+  adjustPingFrequency(newInterval: number) {
+    if (this.pingIntervalTime !== newInterval) {
+      if (this.pingInterval != null) {
+        clearInterval(this.pingInterval);
+      }
+      this.pingIntervalTime = newInterval;
+      this.startPingPong();
+    }
+  }
+
   resetPingTimeout() {
-    if (this.pingTimeout) {
+    if (this.pingTimeout != null) {
       clearTimeout(this.pingTimeout);
     }
     this.pingTimeout = setTimeout(() => {
-      this.wasDisconnected = true;
-    }, 5500);
+      if (this.pingIntervalTime === 5000) {
+        this.adjustPingFrequency(1000);
+        this.pingTimeout = setTimeout(() => {
+          this.emit("disconnect");
+          this.wasDisconnected = true;
+        }, 3000);
+      }
+    }, this.pingIntervalTime);
+  }
+
+  stopPingPong() {
+    if (this.pingInterval != null) {
+      clearInterval(this.pingInterval);
+    }
+    if (this.pingTimeout != null) {
+      clearTimeout(this.pingTimeout);
+    }
   }
 
   send(audio: Uint8Array) {
