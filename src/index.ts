@@ -1,5 +1,9 @@
 // retell-client-sdk.ts
-import { AudioWsClient, convertFloat32ToUint8, convertUint8ToFloat32 } from "./audioWsClient";
+import {
+  AudioWsClient,
+  convertFloat32ToUint8,
+  convertUint8ToFloat32,
+} from "./audioWsClient";
 import { EventEmitter } from "eventemitter3";
 import { workletCode } from "./audioWorklet";
 
@@ -24,6 +28,7 @@ export class RetellWebClient extends EventEmitter {
   private captureNode: ScriptProcessorNode | null = null;
   private audioData: Float32Array[] = [];
   private audioDataIndex: number = 0;
+  private isTalking: boolean = false;
 
   constructor(customEndpoint?: string) {
     super();
@@ -83,8 +88,7 @@ export class RetellWebClient extends EventEmitter {
     });
 
     this.liveClient.on("audio", (audio: Uint8Array) => {
-      this.playAudio(audio)
-      this.emit("audio", audio);
+      this.playAudio(audio);
     });
 
     this.liveClient.on("disconnect", () => {
@@ -121,31 +125,35 @@ export class RetellWebClient extends EventEmitter {
       } else {
         this.audioData = [];
         this.audioDataIndex = 0;
+        if (this.isTalking) {
+          this.isTalking = false;
+          this.emit("agentStopTalking");
+        }
       }
     });
   }
 
+  private async setupAudioPlayback(
+    sampleRate: number,
+    customStream?: MediaStream,
+  ): Promise<void> {
+    this.audioContext = new AudioContext({ sampleRate: sampleRate });
+    try {
+      this.stream =
+        customStream ||
+        (await navigator.mediaDevices.getUserMedia({
+          audio: {
+            sampleRate: sampleRate,
+            echoCancellation: true,
+            noiseSuppression: true,
+            channelCount: 1,
+          },
+        }));
+    } catch (error) {
+      throw new Error("User didn't give microphone permission");
+    }
 
-  private async setupAudioPlayback(sampleRate: number,
-    customStream?: MediaStream,): Promise<void> {
     if (this.isAudioWorkletSupported()) {
-      this.audioContext = new AudioContext({ sampleRate: sampleRate });
-
-      try {
-        this.stream =
-          customStream ||
-          (await navigator.mediaDevices.getUserMedia({
-            audio: {
-              sampleRate: sampleRate,
-              echoCancellation: true,
-              noiseSuppression: true,
-              channelCount: 1,
-            },
-          }));
-      } catch (error) {
-        throw new Error("User didn't give microphone permission");
-      }
-
       console.log("Audio worklet starting");
       this.audioContext.resume();
       const blob = new Blob([workletCode], { type: "application/javascript" });
@@ -159,35 +167,33 @@ export class RetellWebClient extends EventEmitter {
       console.log("Audio worklet setup");
 
       this.audioNode.port.onmessage = (e) => {
-        if (this.liveClient != null) {
-          this.liveClient.send(e.data);
+        let data = e.data;
+        if (Array.isArray(data)) {
+          // capture or playback
+          let eventName = data[0];
+          if (eventName === "capture") {
+            this.liveClient?.send(data[1]);
+          } else if (eventName === "playback") {
+            this.emit("audio", data[1]);
+          }
+        } else {
+          if (data === "agent_stop_talking") {
+            this.emit("agentStopTalking");
+          } else if (data === "agent_start_talking") {
+            this.emit("agentStartTalking");
+          }
         }
       };
 
       const source = this.audioContext.createMediaStreamSource(this.stream);
       source.connect(this.audioNode);
       this.audioNode.connect(this.audioContext.destination);
-
     } else {
-      this.audioContext = new AudioContext({ sampleRate: sampleRate });
-
-      try {
-        this.stream = customStream || await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: sampleRate,
-            echoCancellation: true,
-            noiseSuppression: true,
-            channelCount: 1,
-          },
-        });
-      } catch (error) {
-        throw new Error("User didn't give microphone permission");
-      }
-
       const source = this.audioContext.createMediaStreamSource(this.stream);
       this.captureNode = this.audioContext.createScriptProcessor(2048, 1, 1);
-      this.captureNode.onaudioprocess = (audioProcessingEvent: AudioProcessingEvent) => {
-
+      this.captureNode.onaudioprocess = (
+        audioProcessingEvent: AudioProcessingEvent,
+      ) => {
         if (this.isCalling) {
           const pcmFloat32Data =
             audioProcessingEvent.inputBuffer.getChannelData(0);
@@ -208,6 +214,12 @@ export class RetellWebClient extends EventEmitter {
               outputChannel[i] = 0;
             }
           }
+
+          this.emit("audio", convertFloat32ToUint8(outputChannel));
+          if (!this.audioData.length && this.isTalking) {
+            this.isTalking = false;
+            this.emit("agentStopTalking");
+          }
         }
       };
       source.connect(this.captureNode);
@@ -216,16 +228,21 @@ export class RetellWebClient extends EventEmitter {
   }
 
   private isAudioWorkletSupported(): boolean {
-    return /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+    return (
+      /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
+    );
   }
 
   private playAudio(audio: Uint8Array): void {
     if (this.isAudioWorkletSupported()) {
       this.audioNode.port.postMessage(audio);
-
     } else {
       const float32Data = convertUint8ToFloat32(audio);
       this.audioData.push(float32Data);
+      if (!this.isTalking) {
+        this.isTalking = true;
+        this.emit("agentStartTalking");
+      }
     }
   }
 }

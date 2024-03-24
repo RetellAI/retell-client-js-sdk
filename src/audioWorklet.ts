@@ -2,6 +2,7 @@ export const workletCode = `
 class captureAndPlaybackProcessor extends AudioWorkletProcessor {
     audioData = [];
     index = 0;
+    isTalking = false;
   
     constructor() {
       super();
@@ -11,8 +12,16 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
           // Clear all buffer.
           this.audioData = [];
           this.index = 0;
+          if (this.isTalking) {
+            this.isTalking = false;
+            this.port.postMessage("agent_stop_talking");
+          }
         } else if (e.data.length > 0) {
           this.audioData.push(this.convertUint8ToFloat32(e.data));
+          if (!this.isTalking) {
+            this.isTalking = true;
+            this.port.postMessage("agent_start_talking");
+          }
         }
       };
     }
@@ -47,7 +56,7 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
       const input = inputs[0];
       const inputChannel1 = input[0];
       const inputChannel2 = input[1];
-      this.port.postMessage(this.convertFloat32ToUint8(inputChannel1));
+      this.port.postMessage(["capture", this.convertFloat32ToUint8(inputChannel1)]);
   
       // Playback
       const output = outputs[0];
@@ -67,6 +76,13 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
           outputChannel1[i] = 0;
           outputChannel2[i] = 0;
         }
+      }
+
+      this.port.postMessage(["playback", this.convertFloat32ToUint8(outputChannel1)]);
+      if (!this.audioData.length && this.isTalking) {
+        this.isTalking = false;
+        this.port.postMessage("agent_stop_talking");
+        this.port.postMessage(outputChannel1);
       }
   
       return true;
