@@ -82,7 +82,6 @@ class captureAndPlaybackProcessor extends AudioWorkletProcessor {
       if (!this.audioData.length && this.isTalking) {
         this.isTalking = false;
         this.port.postMessage("agent_stop_talking");
-        this.port.postMessage(outputChannel1);
       }
   
       return true;
