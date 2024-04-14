@@ -16,7 +16,7 @@ export interface StartConversationConfig {
 
 export class RetellWebClient extends EventEmitter {
   private liveClient: AudioWsClient;
-  private audioContext: AudioContext;
+  public audioContext: AudioContext;
   private isCalling: boolean = false;
   private stream: MediaStream;
 
@@ -28,7 +28,7 @@ export class RetellWebClient extends EventEmitter {
   private captureNode: ScriptProcessorNode | null = null;
   private audioData: Float32Array[] = [];
   private audioDataIndex: number = 0;
-  private isTalking: boolean = false;
+  public isTalking: boolean = false;
 
   constructor(customEndpoint?: string) {
     super();
