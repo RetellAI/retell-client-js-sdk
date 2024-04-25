@@ -117,6 +117,10 @@ export class RetellWebClient extends EventEmitter {
       this.emit("update", update);
     });
 
+    this.liveClient.on("metadata", (metadata) => {
+      this.emit("metadata", metadata);
+    });
+
     // Not exposed
 
     this.liveClient.on("clear", () => {

@@ -35,7 +35,6 @@ export class AudioWsClient extends EventEmitter {
     };
 
     this.ws.onmessage = (event) => {
-
       if (typeof event.data === "string") {
         if (event.data === "pong") {
           if (this.wasDisconnected) {
@@ -43,14 +42,17 @@ export class AudioWsClient extends EventEmitter {
             this.wasDisconnected = false;
           }
           this.adjustPingFrequency(5000); // Reset ping frequency to 5 seconds
-        }
-        else if (event.data === "clear") {
+        } else if (event.data === "clear") {
           this.emit("clear");
         } else {
           // Handle json update data
           try {
-            const update = JSON.parse(event.data);
-            this.emit("update", update);
+            const eventData = JSON.parse(event.data);
+            if (eventData.event_type === "update") {
+              this.emit("update", eventData);
+            } else if (eventData.event_type === "metadata") {
+              this.emit("metadata", eventData);
+            }
           } catch (err) {
             console.log(err);
           }
@@ -74,7 +76,10 @@ export class AudioWsClient extends EventEmitter {
   }
 
   startPingPong() {
-    this.pingInterval = setInterval(() => this.sendPing(), this.pingIntervalTime);
+    this.pingInterval = setInterval(
+      () => this.sendPing(),
+      this.pingIntervalTime,
+    );
     this.resetPingTimeout();
   }
 
