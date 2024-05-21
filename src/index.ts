@@ -11,6 +11,7 @@ export interface StartConversationConfig {
   callId: string;
   sampleRate: number;
   customStream?: MediaStream;
+  customSinkId?: string;
   enableUpdate?: boolean;
 }
 
@@ -37,12 +38,13 @@ export class RetellWebClient extends EventEmitter {
   }
 
   public async startConversation(
-    startConversationConfig: StartConversationConfig,
+    startConversationConfig: StartConversationConfig
   ): Promise<void> {
     try {
       await this.setupAudioPlayback(
         startConversationConfig.sampleRate,
         startConversationConfig.customStream,
+        startConversationConfig.customSinkId
       );
       this.liveClient = new AudioWsClient({
         callId: startConversationConfig.callId,
@@ -140,8 +142,17 @@ export class RetellWebClient extends EventEmitter {
   private async setupAudioPlayback(
     sampleRate: number,
     customStream?: MediaStream,
+    customSinkId?: string
   ): Promise<void> {
     this.audioContext = new AudioContext({ sampleRate: sampleRate });
+    if (customSinkId) {
+      (
+        this.audioContext as AudioContext & {
+          setSinkId: (sinkId: string) => void;
+        }
+      ).setSinkId(customSinkId);
+      console.log("Hello Anne, setting sinkId");
+    }
     try {
       this.stream =
         customStream ||
@@ -166,7 +177,7 @@ export class RetellWebClient extends EventEmitter {
       console.log("Audio worklet loaded");
       this.audioNode = new AudioWorkletNode(
         this.audioContext,
-        "capture-and-playback-processor",
+        "capture-and-playback-processor"
       );
       console.log("Audio worklet setup");
 
@@ -196,7 +207,7 @@ export class RetellWebClient extends EventEmitter {
       const source = this.audioContext.createMediaStreamSource(this.stream);
       this.captureNode = this.audioContext.createScriptProcessor(2048, 1, 1);
       this.captureNode.onaudioprocess = (
-        audioProcessingEvent: AudioProcessingEvent,
+        audioProcessingEvent: AudioProcessingEvent
       ) => {
         if (this.isCalling) {
           const pcmFloat32Data =
