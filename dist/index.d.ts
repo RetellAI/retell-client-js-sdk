@@ -3,6 +3,7 @@ export interface StartConversationConfig {
     callId: string;
     sampleRate: number;
     customStream?: MediaStream;
+    customSinkId?: string;
     enableUpdate?: boolean;
 }
 export declare class RetellWebClient extends EventEmitter {
