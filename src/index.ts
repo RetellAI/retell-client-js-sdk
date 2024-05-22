@@ -11,6 +11,7 @@ export interface StartConversationConfig {
   callId: string;
   sampleRate: number;
   customStream?: MediaStream;
+  customSinkId?: string;
   enableUpdate?: boolean;
 }
 
@@ -43,6 +44,7 @@ export class RetellWebClient extends EventEmitter {
       await this.setupAudioPlayback(
         startConversationConfig.sampleRate,
         startConversationConfig.customStream,
+        startConversationConfig.customSinkId,
       );
       this.liveClient = new AudioWsClient({
         callId: startConversationConfig.callId,
@@ -140,6 +142,7 @@ export class RetellWebClient extends EventEmitter {
   private async setupAudioPlayback(
     sampleRate: number,
     customStream?: MediaStream,
+    customSinkId?: string,
   ): Promise<void> {
     this.audioContext = new AudioContext({ sampleRate: sampleRate });
     try {
@@ -158,6 +161,9 @@ export class RetellWebClient extends EventEmitter {
     }
 
     if (this.isAudioWorkletSupported()) {
+      if (customSinkId) {
+        (this.audioContext as any).setSinkId(customSinkId);
+      }
       console.log("Audio worklet starting");
       this.audioContext.resume();
       const blob = new Blob([workletCode], { type: "application/javascript" });
