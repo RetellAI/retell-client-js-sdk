@@ -1,26 +1,33 @@
 import { EventEmitter } from "eventemitter3";
-export interface StartConversationConfig {
+export interface StartCallConfig {
     callId: string;
-    sampleRate: number;
-    customStream?: MediaStream;
-    enableUpdate?: boolean;
+    accessToken: string;
+    sampleRate?: number;
+    captureDeviceId?: string;
+    playbackDeviceId?: string;
+    emitRawAudioSamples?: boolean;
+}
+declare global {
+    interface Window {
+        webkitAudioContext: typeof AudioContext;
+    }
 }
 export declare class RetellWebClient extends EventEmitter {
-    private liveClient;
+    private room;
+    private connected;
     audioContext: AudioContext;
-    private isCalling;
-    private stream;
-    private audioNode;
-    private customEndpoint;
-    private captureNode;
-    private audioData;
-    private audioDataIndex;
-    isTalking: boolean;
-    constructor(customEndpoint?: string);
-    startConversation(startConversationConfig: StartConversationConfig): Promise<void>;
-    stopConversation(): void;
+    sampleRate: number;
+    isAgentTalking: boolean;
+    private audioAnalyzerNode;
+    private captureAudioFrame;
+    constructor();
+    private getNewAudioContext;
+    startCall(startCallConfig: StartCallConfig): Promise<void>;
+    startAudioPlayback(): Promise<void>;
+    stopCall(): void;
+    mute(): void;
+    unmute(): void;
+    private captureAudioSamples;
     private handleAudioEvents;
-    private setupAudioPlayback;
-    private isAudioWorkletSupported;
-    private playAudio;
+    private handleDataEvents;
 }
