@@ -14,7 +14,6 @@ const hostUrl = "wss://retell-ai-4ihahnq7.livekit.cloud";
 const decoder = new TextDecoder();
 
 export interface StartCallConfig {
-  callId: string;
   accessToken: string;
   sampleRate?: number;
   captureDeviceId?: string; // specific sink id for audio capture device
