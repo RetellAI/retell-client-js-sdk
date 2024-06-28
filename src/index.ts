@@ -1,258 +1,263 @@
-// retell-client-sdk.ts
-import {
-  AudioWsClient,
-  convertFloat32ToUint8,
-  convertUint8ToFloat32,
-} from "./audioWsClient";
 import { EventEmitter } from "eventemitter3";
-import { workletCode } from "./audioWorklet";
+import {
+  DataPacket_Kind,
+  RemoteParticipant,
+  RemoteTrack,
+  RemoteAudioTrack,
+  RemoteTrackPublication,
+  Room,
+  RoomEvent,
+  Track,
+} from "livekit-client";
 
-export interface StartConversationConfig {
-  callId: string;
-  sampleRate: number;
-  customStream?: MediaStream;
-  customSinkId?: string;
-  enableUpdate?: boolean;
+const hostUrl = "wss://retell-ai-4ihahnq7.livekit.cloud";
+const decoder = new TextDecoder();
+
+export interface StartCallConfig {
+  accessToken: string;
+  sampleRate?: number;
+  captureDeviceId?: string; // specific sink id for audio capture device
+  playbackDeviceId?: string; // specific sink id for audio playback device
+  emitRawAudioSamples?: boolean; // receive raw float32 audio samples (ex. for animation). Default to false.
+}
+
+declare global {
+  interface Window {
+    webkitAudioContext: typeof AudioContext;
+  }
 }
 
 export class RetellWebClient extends EventEmitter {
-  private liveClient: AudioWsClient;
+  // Room related
+  private room: Room;
+  private connected: boolean = false;
+
+  // Web audio related
   public audioContext: AudioContext;
-  private isCalling: boolean = false;
-  private stream: MediaStream;
+  public sampleRate: number;
 
-  // Chrome
-  private audioNode: AudioWorkletNode;
-  private customEndpoint: string;
+  // Helper nodes and variables to analyze and animate based on audio
+  public isAgentTalking: boolean = false;
 
-  // Others
-  private captureNode: ScriptProcessorNode | null = null;
-  private audioData: Float32Array[] = [];
-  private audioDataIndex: number = 0;
-  public isTalking: boolean = false;
+  // Analyser node for all audio (agent + ambient sound), only available when
+  // emitRawAudioSamples is true. Can directly use modify this for visualization.
+  private audioAnalyzerNode: AnalyserNode;
+  private captureAudioFrame: number;
 
-  constructor(customEndpoint?: string) {
+  constructor() {
     super();
-
-    if (customEndpoint) this.customEndpoint = customEndpoint;
   }
 
-  public async startConversation(
-    startConversationConfig: StartConversationConfig,
-  ): Promise<void> {
-    try {
-      await this.setupAudioPlayback(
-        startConversationConfig.sampleRate,
-        startConversationConfig.customStream,
-        startConversationConfig.customSinkId,
-      );
-      this.liveClient = new AudioWsClient({
-        callId: startConversationConfig.callId,
-        enableUpdate: startConversationConfig.enableUpdate,
-        customEndpoint: this.customEndpoint,
+  private getNewAudioContext(
+    startCallConfig: StartCallConfig,
+  ): AudioContext | null {
+    // @ts-ignore
+    let audioContextSupported: boolean =
+      typeof window !== "undefined" &&
+      (window.AudioContext || window.webkitAudioContext);
+    if (audioContextSupported) {
+      return new AudioContext({
+        latencyHint: "interactive",
+        sampleRate: startCallConfig.sampleRate,
       });
-      this.handleAudioEvents();
-      this.isCalling = true;
-    } catch (err) {
-      this.emit("error", (err as Error).message);
     }
   }
 
-  public stopConversation(): void {
-    this.isCalling = false;
-    this.liveClient?.close();
-    this.audioContext?.suspend();
-    this.audioContext?.close(); // Properly close the audio context to release system audio resources
-
-    if (this.isAudioWorkletSupported()) {
-      this.audioNode?.disconnect();
-      this.audioNode = null; // Prevent memory leak by detaching the event handler
-    } else {
-      if (this.captureNode) {
-        this.captureNode.disconnect();
-        this.captureNode.onaudioprocess = null; // Prevent memory leak by detaching the event handler
-        this.captureNode = null;
-        this.audioData = [];
-        this.audioDataIndex = 0;
-      }
-    }
-    // Release references to allow for garbage collection
-    this.liveClient = null;
-    this.stream?.getTracks().forEach((track) => track.stop());
-    this.audioContext = null;
-    this.stream = null;
-  }
-
-  private handleAudioEvents(): void {
-    // Exposed
-    this.liveClient.on("open", () => {
-      this.emit("conversationStarted");
-    });
-
-    this.liveClient.on("audio", (audio: Uint8Array) => {
-      this.playAudio(audio);
-    });
-
-    this.liveClient.on("disconnect", () => {
-      this.emit("disconnect");
-    });
-
-    this.liveClient.on("reconnect", () => {
-      this.emit("reconnect");
-    });
-
-    this.liveClient.on("error", (error) => {
-      this.emit("error", error);
-      if (this.isCalling) {
-        this.stopConversation();
-      }
-    });
-
-    this.liveClient.on("close", (code: number, reason: string) => {
-      if (this.isCalling) {
-        this.stopConversation();
-      }
-      this.emit("conversationEnded", { code, reason });
-    });
-
-    this.liveClient.on("update", (update) => {
-      this.emit("update", update);
-    });
-
-    this.liveClient.on("metadata", (metadata) => {
-      this.emit("metadata", metadata);
-    });
-
-    // Not exposed
-
-    this.liveClient.on("clear", () => {
-      if (this.isAudioWorkletSupported()) {
-        this.audioNode.port.postMessage("clear");
-      } else {
-        this.audioData = [];
-        this.audioDataIndex = 0;
-        if (this.isTalking) {
-          this.isTalking = false;
-          this.emit("agentStopTalking");
-        }
-      }
-    });
-  }
-
-  private async setupAudioPlayback(
-    sampleRate: number,
-    customStream?: MediaStream,
-    customSinkId?: string,
-  ): Promise<void> {
-    this.audioContext = new AudioContext({ sampleRate: sampleRate });
+  public async startCall(startCallConfig: StartCallConfig): Promise<void> {
     try {
-      this.stream =
-        customStream ||
-        (await navigator.mediaDevices.getUserMedia({
-          audio: {
-            sampleRate: sampleRate,
-            echoCancellation: true,
-            noiseSuppression: true,
-            channelCount: 1,
-          },
-        }));
-    } catch (error) {
-      throw new Error("User didn't give microphone permission");
-    }
+      // Create audio context
+      const audioContext = this.getNewAudioContext(startCallConfig);
+      if (audioContext == null) throw new Error("AudioContext not supported");
 
-    if (this.isAudioWorkletSupported()) {
-      if (customSinkId) {
-        (this.audioContext as any).setSinkId(customSinkId);
+      this.audioContext = audioContext;
+      if (this.audioContext.state === "suspended") {
+        try {
+          await this.audioContext.resume();
+        } catch (e: any) {
+          console.warn("Could not resume audio context", {
+            error: e,
+          });
+          throw new Error("AudioContext cannot be resumed");
+        }
       }
-      console.log("Audio worklet starting");
-      this.audioContext.resume();
-      const blob = new Blob([workletCode], { type: "application/javascript" });
-      const blobURL = URL.createObjectURL(blob);
-      await this.audioContext.audioWorklet.addModule(blobURL);
-      console.log("Audio worklet loaded");
-      this.audioNode = new AudioWorkletNode(
-        this.audioContext,
-        "capture-and-playback-processor",
-      );
-      console.log("Audio worklet setup");
+      this.sampleRate = this.audioContext.sampleRate;
 
-      this.audioNode.port.onmessage = (e) => {
-        let data = e.data;
-        if (Array.isArray(data)) {
-          // capture or playback
-          let eventName = data[0];
-          if (eventName === "capture") {
-            this.liveClient?.send(data[1]);
-          } else if (eventName === "playback") {
-            this.emit("audio", data[1]);
-          }
-        } else {
-          if (data === "agent_stop_talking") {
-            this.emit("agentStopTalking");
-          } else if (data === "agent_start_talking") {
-            this.emit("agentStartTalking");
-          }
-        }
-      };
+      // Room options
+      this.room = new Room({
+        audioCaptureDefaults: {
+          autoGainControl: true,
+          echoCancellation: true,
+          noiseSuppression: true,
+          channelCount: 1, // always mono for input
+          deviceId: startCallConfig.captureDeviceId,
+          sampleRate: startCallConfig.sampleRate,
+        },
+        audioOutput: {
+          deviceId: startCallConfig.playbackDeviceId,
+        },
+        webAudioMix: {
+          audioContext: this.audioContext,
+        },
+      });
 
-      const source = this.audioContext.createMediaStreamSource(this.stream);
-      source.connect(this.audioNode);
-      this.audioNode.connect(this.audioContext.destination);
-    } else {
-      const source = this.audioContext.createMediaStreamSource(this.stream);
-      this.captureNode = this.audioContext.createScriptProcessor(2048, 1, 1);
-      this.captureNode.onaudioprocess = (
-        audioProcessingEvent: AudioProcessingEvent,
-      ) => {
-        if (this.isCalling) {
-          const pcmFloat32Data =
-            audioProcessingEvent.inputBuffer.getChannelData(0);
-          const pcmData = convertFloat32ToUint8(pcmFloat32Data);
-          this.liveClient.send(pcmData);
+      // Register handlers
+      this.handleRoomEvents();
+      if (startCallConfig.emitRawAudioSamples) {
+        this.audioAnalyzerNode = this.audioContext.createAnalyser();
+        this.audioAnalyzerNode.fftSize = 2048;
+      }
+      this.handleAudioEvents(startCallConfig);
+      this.handleDataEvents();
 
-          // Playback here
-          const outputBuffer = audioProcessingEvent.outputBuffer;
-          const outputChannel = outputBuffer.getChannelData(0);
-          for (let i = 0; i < outputChannel.length; ++i) {
-            if (this.audioData.length > 0) {
-              outputChannel[i] = this.audioData[0][this.audioDataIndex++];
-              if (this.audioDataIndex === this.audioData[0].length) {
-                this.audioData.shift();
-                this.audioDataIndex = 0;
-              }
-            } else {
-              outputChannel[i] = 0;
-            }
-          }
+      // Connect to room
+      await this.room.connect(hostUrl, startCallConfig.accessToken);
+      console.log("connected to room", this.room.name);
 
-          this.emit("audio", convertFloat32ToUint8(outputChannel));
-          if (!this.audioData.length && this.isTalking) {
-            this.isTalking = false;
-            this.emit("agentStopTalking");
-          }
-        }
-      };
-      source.connect(this.captureNode);
-      this.captureNode.connect(this.audioContext.destination);
+      // Turns microphone track on
+      this.room.localParticipant.setMicrophoneEnabled(true);
+      this.connected = true;
+      this.emit("call_started");
+
+      // Start capturing audio samples
+      if (startCallConfig.emitRawAudioSamples) {
+        this.captureAudioFrame = window.requestAnimationFrame(() =>
+          this.captureAudioSamples(),
+        );
+      }
+    } catch (err) {
+      this.emit("error", "Error starting call");
+      console.error("Error starting call", err);
+      // Cleanup
+      this.stopCall();
     }
   }
 
-  private isAudioWorkletSupported(): boolean {
-    return (
-      /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
+  // Optional.
+  // Some browser does not support audio playback without user interaction
+  // Call this function inside a click/tap handler to start audio playback
+  public async startAudioPlayback() {
+    await this.room.startAudio();
+  }
+
+  public stopCall(): void {
+    // Cleanup variables and disconnect from room
+    if (this.connected) {
+      this.connected = false;
+      this.emit("call_ended");
+      this.room?.disconnect();
+    }
+
+    this.isAgentTalking = false;
+    delete this.room;
+    delete this.sampleRate;
+
+    if (this.audioAnalyzerNode) {
+      this.audioAnalyzerNode.disconnect();
+      delete this.audioAnalyzerNode;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      delete this.audioContext;
+    }
+
+    if (this.captureAudioFrame) {
+      window.cancelAnimationFrame(this.captureAudioFrame);
+      delete this.captureAudioFrame;
+    }
+  }
+
+  public mute(): void {
+    if (this.connected) this.room.localParticipant.setMicrophoneEnabled(false);
+  }
+
+  public unmute(): void {
+    if (this.connected) this.room.localParticipant.setMicrophoneEnabled(true);
+  }
+
+  private captureAudioSamples() {
+    if (!this.connected || !this.audioAnalyzerNode) return;
+    let bufferLength = this.audioAnalyzerNode.fftSize;
+    let dataArray = new Float32Array(bufferLength);
+    this.audioAnalyzerNode.getFloatTimeDomainData(dataArray);
+    this.emit("audio", dataArray);
+    this.captureAudioFrame = window.requestAnimationFrame(() =>
+      this.captureAudioSamples(),
     );
   }
 
-  private playAudio(audio: Uint8Array): void {
-    if (this.isAudioWorkletSupported()) {
-      this.audioNode.port.postMessage(audio);
-    } else {
-      const float32Data = convertUint8ToFloat32(audio);
-      this.audioData.push(float32Data);
-      if (!this.isTalking) {
-        this.isTalking = true;
-        this.emit("agentStartTalking");
+  private handleRoomEvents(): void {
+    this.room.on(
+      RoomEvent.ParticipantDisconnected,
+      (participant: RemoteParticipant) => {
+        if (participant?.identity === "server") {
+          // Agent hang up
+          this.stopCall();
+        }
+      },
+    );
+
+    this.room.on(RoomEvent.Disconnected, () => {
+      // room disconnected
+      if (this.connected) {
+        this.stopCall();
       }
-    }
+    });
+  }
+
+  private handleAudioEvents(startCallConfig: StartCallConfig): void {
+    this.room.on(
+      RoomEvent.TrackSubscribed,
+      (
+        track: RemoteTrack,
+        publication: RemoteTrackPublication,
+        participant: RemoteParticipant,
+      ) => {
+        if (track.kind === Track.Kind.Audio) {
+          if (
+            track instanceof RemoteAudioTrack &&
+            startCallConfig.emitRawAudioSamples
+          ) {
+            track.setWebAudioPlugins([this.audioAnalyzerNode]);
+          }
+
+          // Start playing audio
+          track.attach();
+        }
+      },
+    );
+  }
+
+  private handleDataEvents(): void {
+    this.room.on(
+      RoomEvent.DataReceived,
+      (
+        payload: Uint8Array,
+        participant?: RemoteParticipant,
+        kind?: DataPacket_Kind,
+        topic?: string,
+      ) => {
+        try {
+          // parse server data
+          if (participant?.identity !== "server") return;
+
+          let decodedData = decoder.decode(payload);
+          let event = JSON.parse(decodedData);
+          if (event.event_type === "update") {
+            this.emit("update", event);
+          } else if (event.event_type === "metadata") {
+            this.emit("metadata", event);
+          } else if (event.event_type === "agent_start_talking") {
+            this.isAgentTalking = true;
+            this.emit("agent_start_talking");
+          } else if (event.event_type === "agent_stop_talking") {
+            this.isAgentTalking = false;
+            this.emit("agent_stop_talking");
+          }
+        } catch (err) {
+          console.error("Error decoding data received", err);
+        }
+      },
+    );
   }
 }
