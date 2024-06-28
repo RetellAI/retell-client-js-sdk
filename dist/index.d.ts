@@ -27,6 +27,7 @@ export declare class RetellWebClient extends EventEmitter {
     mute(): void;
     unmute(): void;
     private captureAudioSamples;
+    private handleRoomEvents;
     private handleAudioEvents;
     private handleDataEvents;
 }

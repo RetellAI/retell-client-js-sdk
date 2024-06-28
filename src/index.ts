@@ -101,15 +101,7 @@ export class RetellWebClient extends EventEmitter {
       });
 
       // Register handlers
-      this.room.on(RoomEvent.Disconnected, () => {
-        // handle disconnection
-        if (this.connected) {
-          this.connected = false;
-          this.room.disconnect();
-          this.emit("call_ended");
-        }
-      });
-
+      this.handleRoomEvents();
       if (startCallConfig.emitRawAudioSamples) {
         this.audioAnalyzerNode = this.audioContext.createAnalyser();
         this.audioAnalyzerNode.fftSize = 2048;
@@ -157,13 +149,18 @@ export class RetellWebClient extends EventEmitter {
 
     this.isAgentTalking = false;
     delete this.room;
+    delete this.sampleRate;
+
+    if (this.audioAnalyzerNode) {
+      this.audioAnalyzerNode.disconnect();
+      delete this.audioAnalyzerNode;
+    }
+
     if (this.audioContext) {
       this.audioContext.close();
       delete this.audioContext;
     }
 
-    delete this.sampleRate;
-    delete this.audioAnalyzerNode;
     if (this.captureAudioFrame) {
       window.cancelAnimationFrame(this.captureAudioFrame);
       delete this.captureAudioFrame;
@@ -187,6 +184,25 @@ export class RetellWebClient extends EventEmitter {
     this.captureAudioFrame = window.requestAnimationFrame(() =>
       this.captureAudioSamples(),
     );
+  }
+
+  private handleRoomEvents(): void {
+    this.room.on(
+      RoomEvent.ParticipantDisconnected,
+      (participant: RemoteParticipant) => {
+        if (participant?.identity === "server") {
+          // Agent hang up
+          this.stopCall();
+        }
+      },
+    );
+
+    this.room.on(RoomEvent.Disconnected, () => {
+      // room disconnected
+      if (this.connected) {
+        this.stopCall();
+      }
+    });
   }
 
   private handleAudioEvents(startCallConfig: StartCallConfig): void {
