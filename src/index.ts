@@ -8,6 +8,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  createAudioAnalyser,
 } from "livekit-client";
 
 const hostUrl = "wss://retell-ai-4ihahnq7.livekit.cloud";
@@ -21,67 +22,30 @@ export interface StartCallConfig {
   emitRawAudioSamples?: boolean; // receive raw float32 audio samples (ex. for animation). Default to false.
 }
 
-declare global {
-  interface Window {
-    webkitAudioContext: typeof AudioContext;
-  }
-}
-
 export class RetellWebClient extends EventEmitter {
   // Room related
   private room: Room;
   private connected: boolean = false;
 
-  // Web audio related
-  public audioContext: AudioContext;
-  public sampleRate: number;
-
   // Helper nodes and variables to analyze and animate based on audio
   public isAgentTalking: boolean = false;
 
-  // Analyser node for all audio (agent + ambient sound), only available when
-  // emitRawAudioSamples is true. Can directly use modify this for visualization.
-  private audioAnalyzerNode: AnalyserNode;
+  // Analyser node for agent audio, only available when
+  // emitRawAudioSamples is true. Can directly use / modify this for visualization.
+  // contains a calculateVolume helper method to get the current volume.
+  public analyzerComponent: {
+    calculateVolume: () => number;
+    analyser: AnalyserNode;
+    cleanup: () => Promise<void>;
+  };
   private captureAudioFrame: number;
 
   constructor() {
     super();
   }
 
-  private getNewAudioContext(
-    startCallConfig: StartCallConfig,
-  ): AudioContext | null {
-    // @ts-ignore
-    let audioContextSupported: boolean =
-      typeof window !== "undefined" &&
-      (window.AudioContext || window.webkitAudioContext);
-    if (audioContextSupported) {
-      return new AudioContext({
-        latencyHint: "interactive",
-        sampleRate: startCallConfig.sampleRate,
-      });
-    }
-  }
-
   public async startCall(startCallConfig: StartCallConfig): Promise<void> {
     try {
-      // Create audio context
-      const audioContext = this.getNewAudioContext(startCallConfig);
-      if (audioContext == null) throw new Error("AudioContext not supported");
-
-      this.audioContext = audioContext;
-      if (this.audioContext.state === "suspended") {
-        try {
-          await this.audioContext.resume();
-        } catch (e: any) {
-          console.warn("Could not resume audio context", {
-            error: e,
-          });
-          throw new Error("AudioContext cannot be resumed");
-        }
-      }
-      this.sampleRate = this.audioContext.sampleRate;
-
       // Room options
       this.room = new Room({
         audioCaptureDefaults: {
@@ -95,17 +59,10 @@ export class RetellWebClient extends EventEmitter {
         audioOutput: {
           deviceId: startCallConfig.playbackDeviceId,
         },
-        webAudioMix: {
-          audioContext: this.audioContext,
-        },
       });
 
       // Register handlers
       this.handleRoomEvents();
-      if (startCallConfig.emitRawAudioSamples) {
-        this.audioAnalyzerNode = this.audioContext.createAnalyser();
-        this.audioAnalyzerNode.fftSize = 2048;
-      }
       this.handleAudioEvents(startCallConfig);
       this.handleDataEvents();
 
@@ -117,13 +74,6 @@ export class RetellWebClient extends EventEmitter {
       this.room.localParticipant.setMicrophoneEnabled(true);
       this.connected = true;
       this.emit("call_started");
-
-      // Start capturing audio samples
-      if (startCallConfig.emitRawAudioSamples) {
-        this.captureAudioFrame = window.requestAnimationFrame(() =>
-          this.captureAudioSamples(),
-        );
-      }
     } catch (err) {
       this.emit("error", "Error starting call");
       console.error("Error starting call", err);
@@ -149,16 +99,10 @@ export class RetellWebClient extends EventEmitter {
 
     this.isAgentTalking = false;
     delete this.room;
-    delete this.sampleRate;
 
-    if (this.audioAnalyzerNode) {
-      this.audioAnalyzerNode.disconnect();
-      delete this.audioAnalyzerNode;
-    }
-
-    if (this.audioContext) {
-      this.audioContext.close();
-      delete this.audioContext;
+    if (this.analyzerComponent) {
+      this.analyzerComponent.cleanup();
+      delete this.analyzerComponent;
     }
 
     if (this.captureAudioFrame) {
@@ -176,10 +120,10 @@ export class RetellWebClient extends EventEmitter {
   }
 
   private captureAudioSamples() {
-    if (!this.connected || !this.audioAnalyzerNode) return;
-    let bufferLength = this.audioAnalyzerNode.fftSize;
+    if (!this.connected || !this.analyzerComponent) return;
+    let bufferLength = this.analyzerComponent.analyser.fftSize;
     let dataArray = new Float32Array(bufferLength);
-    this.audioAnalyzerNode.getFloatTimeDomainData(dataArray);
+    this.analyzerComponent.analyser.getFloatTimeDomainData(dataArray);
     this.emit("audio", dataArray);
     this.captureAudioFrame = window.requestAnimationFrame(() =>
       this.captureAudioSamples(),
@@ -215,10 +159,14 @@ export class RetellWebClient extends EventEmitter {
       ) => {
         if (track.kind === Track.Kind.Audio) {
           if (
+            publication.trackName === "agent_audio" &&
             track instanceof RemoteAudioTrack &&
             startCallConfig.emitRawAudioSamples
           ) {
-            track.setWebAudioPlugins([this.audioAnalyzerNode]);
+            this.analyzerComponent = createAudioAnalyser(track);
+            this.captureAudioFrame = window.requestAnimationFrame(() =>
+              this.captureAudioSamples(),
+            );
           }
 
           // Start playing audio
