@@ -201,6 +201,8 @@ export class RetellWebClient extends EventEmitter {
           } else if (event.event_type === "agent_stop_talking") {
             this.isAgentTalking = false;
             this.emit("agent_stop_talking");
+          } else if (event.event_type === "node_transition") {
+            this.emit("node_transition", event);
           }
         } catch (err) {
           console.error("Error decoding data received", err);
