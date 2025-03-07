@@ -157,12 +157,16 @@ export class RetellWebClient extends EventEmitter {
         publication: RemoteTrackPublication,
         participant: RemoteParticipant,
       ) => {
-        if (track.kind === Track.Kind.Audio) {
-          if (
-            publication.trackName === "agent_audio" &&
-            track instanceof RemoteAudioTrack &&
-            startCallConfig.emitRawAudioSamples
-          ) {
+        if (
+          track.kind === Track.Kind.Audio &&
+          track instanceof RemoteAudioTrack &&
+          publication.trackName === "agent_audio"
+        ) {
+          // this is where the agent can start playback
+          // can be used to stop loading animation
+          this.emit("call_ready");
+
+          if (startCallConfig.emitRawAudioSamples) {
             this.analyzerComponent = createAudioAnalyser(track);
             this.captureAudioFrame = window.requestAnimationFrame(() =>
               this.captureAudioSamples(),
