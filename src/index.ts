@@ -90,12 +90,11 @@ export class RetellWebClient extends EventEmitter {
   }
 
   public stopCall(): void {
+    if (!this.connected) return;
     // Cleanup variables and disconnect from room
-    if (this.connected) {
-      this.connected = false;
-      this.emit("call_ended");
-      this.room?.disconnect();
-    }
+    this.connected = false;
+    this.emit("call_ended");
+    this.room?.disconnect();
 
     this.isAgentTalking = false;
     delete this.room;
@@ -135,17 +134,17 @@ export class RetellWebClient extends EventEmitter {
       RoomEvent.ParticipantDisconnected,
       (participant: RemoteParticipant) => {
         if (participant?.identity === "server") {
-          // Agent hang up
-          this.stopCall();
+          // Agent hang up, wait 500ms to hangup call to avoid cutoff last bit of audio
+          setTimeout(() => {
+            this.stopCall();
+          }, 500);
         }
       },
     );
 
     this.room.on(RoomEvent.Disconnected, () => {
       // room disconnected
-      if (this.connected) {
-        this.stopCall();
-      }
+      this.stopCall();
     });
   }
 
@@ -159,21 +158,22 @@ export class RetellWebClient extends EventEmitter {
       ) => {
         if (
           track.kind === Track.Kind.Audio &&
-          track instanceof RemoteAudioTrack &&
-          publication.trackName === "agent_audio"
+          track instanceof RemoteAudioTrack
         ) {
-          // this is where the agent can start playback
-          // can be used to stop loading animation
-          this.emit("call_ready");
+          if (publication.trackName === "agent_audio") {
+            // this is where the agent can start playback
+            // can be used to stop loading animation
+            this.emit("call_ready");
 
-          if (startCallConfig.emitRawAudioSamples) {
-            this.analyzerComponent = createAudioAnalyser(track);
-            this.captureAudioFrame = window.requestAnimationFrame(() =>
-              this.captureAudioSamples(),
-            );
+            if (startCallConfig.emitRawAudioSamples) {
+              this.analyzerComponent = createAudioAnalyser(track);
+              this.captureAudioFrame = window.requestAnimationFrame(() =>
+                this.captureAudioSamples(),
+              );
+            }
           }
 
-          // Start playing audio
+          // Start playing audio for subscribed tracks
           track.attach();
         }
       },
