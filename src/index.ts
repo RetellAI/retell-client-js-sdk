@@ -130,18 +130,6 @@ export class RetellWebClient extends EventEmitter {
   }
 
   private handleRoomEvents(): void {
-    this.room.on(
-      RoomEvent.ParticipantDisconnected,
-      (participant: RemoteParticipant) => {
-        if (participant?.identity === "server") {
-          // Agent hang up, wait 500ms to hangup call to avoid cutoff last bit of audio
-          setTimeout(() => {
-            this.stopCall();
-          }, 500);
-        }
-      },
-    );
-
     this.room.on(RoomEvent.Disconnected, () => {
       // room disconnected
       this.stopCall();
