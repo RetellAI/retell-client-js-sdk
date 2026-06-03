@@ -86,7 +86,7 @@ export class RetellWebClient extends EventEmitter {
   // Some browser does not support audio playback without user interaction
   // Call this function inside a click/tap handler to start audio playback
   public async startAudioPlayback() {
-    await this.room.startAudio();
+    if (this.connected) await this.room.startAudio();
   }
 
   public stopCall(): void {
