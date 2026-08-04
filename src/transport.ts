@@ -16,6 +16,11 @@ export interface StartCallConfig {
   callToken?: string; // per-call short-lived JWT, sent as Bearer to the WHIP endpoint
   identity?: string; // participant identity; defaults to "web-<callId>"
   target?: string; // room target, default "main"
+  // ICE servers for the browser's PeerConnection, provided by the backend at
+  // bootstrap (e.g. coturn with short-lived HMAC creds) for UDP-hostile networks.
+  // Must be set at PC-create time, so it rides the bootstrap, not the WHIP answer.
+  // Omit/empty ⇒ direct connection to the gateway's public host candidate.
+  iceServers?: RTCIceServer[];
 
   // --- Transport selection (backend-authoritative, caller-overridable) ---
   // Explicit `transport` wins; otherwise inferred from which fields are present

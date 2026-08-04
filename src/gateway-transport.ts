@@ -49,7 +49,9 @@ export class GatewayTransport implements Transport {
       },
     });
 
-    const pc = new RTCPeerConnection({ iceServers: [] });
+    // ICE servers (coturn etc.) come from the backend bootstrap; empty ⇒ direct
+    // to the gateway's public host candidate.
+    const pc = new RTCPeerConnection({ iceServers: this.config.iceServers || [] });
     this.pc = pc;
     this.localStream.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
 
