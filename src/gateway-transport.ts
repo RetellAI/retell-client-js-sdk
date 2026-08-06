@@ -88,6 +88,13 @@ export class GatewayTransport implements Transport {
       // "disconnected" can be transient; only tear down on terminal states.
       if (s === "failed" || s === "closed") handlers.onDisconnected();
     };
+    // Fallback for browsers without connectionState (Firefox < 113): map terminal
+    // ICE states to teardown. onDisconnected → stopCall is idempotent, so running
+    // alongside onconnectionstatechange on modern browsers is harmless.
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if (s === "failed" || s === "closed") handlers.onDisconnected();
+    };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -210,6 +217,10 @@ function createGatewayAnalyser(track: MediaStreamTrack): AnalyzerComponent {
   const Ctor: typeof AudioContext =
     (window as any).AudioContext || (window as any).webkitAudioContext;
   const ctx = new Ctor();
+  // A freshly created AudioContext starts "suspended" and won't pull samples until
+  // resumed (needs a user gesture in some browsers). Best-effort resume so the
+  // analyser produces data; playback is unaffected (it goes via the <audio> element).
+  ctx.resume().catch(() => {});
   const source = ctx.createMediaStreamSource(new MediaStream([track]));
   const analyser = ctx.createAnalyser();
   source.connect(analyser);
