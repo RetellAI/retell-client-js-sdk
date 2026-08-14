@@ -19,7 +19,9 @@ export interface StartCallConfig {
   sampleRate?: number;
   captureDeviceId?: string; // specific sink id for audio capture device
   playbackDeviceId?: string; // specific sink id for audio playback device
-  emitRawAudioSamples?: boolean; // receive raw float32 audio samples (ex. for animation). Default to false.
+  // Emit Float32Array analyser snapshots for visualization. These are not
+  // contiguous PCM frames. Defaults to false.
+  emitRawAudioSamples?: boolean;
 }
 
 export class RetellWebClient extends EventEmitter {
