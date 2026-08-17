@@ -105,11 +105,14 @@
       </div>
 
       <div class="note">
-        <b>Local testing only.</b> This page sends your API key straight from the
-        browser, which a real integration must never do — mint tokens on your
-        server. Also serve it over <code>http://localhost</code> (e.g.
-        <code>npx serve examples</code>): the mic needs a secure context, and
-        <code>file://</code> is not one.
+        <b>Local testing only.</b> This page sends your credential straight from
+        the browser, which a real integration must never do — mint tokens on your
+        server. Web call takes an API key; live-listen and take-over are dashboard
+        endpoints, so they need a dashboard JWT plus the Org ID below. Serve this
+        over <code>http://localhost</code> from the repo root (e.g.
+        <code>python3 -m http.server 8099</code>): the mic needs a secure context,
+        <code>file://</code> is not one, and the page loads the SDK from
+        <code>../dist</code>.
       </div>
 
       <div class="card" style="margin-bottom: 16px">
@@ -120,10 +123,12 @@
             <input id="apiBase" value="http://localhost:8080" />
           </div>
           <div>
-            <label for="apiKey">API key</label>
-            <input id="apiKey" type="password" placeholder="key_..." />
+            <label for="apiKey">API key <span style="opacity:.6">— or a dashboard JWT, for live-listen</span></label>
+            <input id="apiKey" type="password" placeholder="key_... / eyJ..." />
           </div>
         </div>
+        <label for="orgId">Org ID <span style="opacity:.6">— required with a JWT; an API key already implies its org</span></label>
+        <input id="orgId" placeholder="org_..." />
       </div>
 
       <div class="grid">
@@ -198,11 +203,17 @@
 
       async function api(path, body) {
         const base = $("apiBase").value.replace(/\/+$/, "");
+        const orgId = $("orgId").value.trim();
         const resp = await fetch(base + path, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: "Bearer " + $("apiKey").value.trim(),
+            // The dashboard endpoints (live-listen, take-over) authenticate with a
+            // user JWT, which identifies a person, not an org — and a person can
+            // belong to several. So the org has to be named separately. An API key
+            // already carries its org, and ignores this.
+            ...(orgId ? { orgId } : {}),
           },
           body: JSON.stringify(body ?? {}),
         });
@@ -357,7 +368,19 @@
             }),
           );
           $("btnStopListen").disabled = false;
-          $("btnTakeOver").disabled = transport !== "gateway" || !listenIdentity;
+          // Take-over is gateway-only here: on LiveKit it runs through a
+          // different backend path this page doesn't drive. Say so rather than
+          // leaving a dead button.
+          const canTakeOver = transport === "gateway" && !!listenIdentity;
+          $("btnTakeOver").disabled = !canTakeOver;
+          if (!canTakeOver) {
+            log(
+              transport !== "gateway"
+                ? `take-over unavailable: this call is on ${transport}, not the gateway`
+                : "take-over unavailable: the backend returned no participant_id",
+              "log-dim",
+            );
+          }
         } catch (err) {
           log(String(err.message ?? err), "log-err");
           resetListen();
