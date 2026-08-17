@@ -16,6 +16,7 @@ export interface StartCallConfig {
   callToken?: string; // per-call short-lived JWT, sent as Bearer to the WHIP endpoint
   identity?: string; // participant identity; defaults to "web-<callId>"
   target?: string; // room target, default "main"
+  direction?: "inbound" | "outbound"; // room direction; must match the agent leg
   // ICE servers for the browser's PeerConnection, provided by the backend at
   // bootstrap (e.g. coturn with short-lived HMAC creds) for UDP-hostile networks.
   // Must be set at PC-create time, so it rides the bootstrap, not the WHIP answer.
@@ -26,6 +27,11 @@ export interface StartCallConfig {
   // Explicit `transport` wins; otherwise inferred from which fields are present
   // (gateway if gateway fields, else livekit), then the client's defaultTransport.
   transport?: TransportKind;
+
+  // Live-listen (gateway only): join receive-only — hear the room mix without
+  // opening the mic. No audio is published until takeOver() (the dashboard
+  // take-over) opens the mic and renegotiates. Ignored by the LiveKit transport.
+  listener?: boolean;
 
   // --- Common audio options ---
   sampleRate?: number;
@@ -57,6 +63,10 @@ export interface Transport {
   setMicEnabled(enabled: boolean): void;
   resumeAudioPlayback(): Promise<void>;
   close(): void;
+  // Live-listen take-over (gateway only): open the mic on a receive-only session
+  // and renegotiate so audio starts flowing. The backend must have promoted the
+  // session first (POST /v2/take-over-live-call). No-op/absent on LiveKit.
+  takeOver?(): Promise<void>;
 }
 
 // selectTransport resolves the transport for a call. Explicit config wins, then

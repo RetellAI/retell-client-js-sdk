@@ -106,6 +106,14 @@ export class RetellWebClient extends EventEmitter {
     }
   }
 
+  // Live-listen take-over: on a receive-only listener call (startCall with
+  // listener:true), open the mic and start talking to the caller. Call AFTER the
+  // backend take-over succeeds (POST /v2/take-over-live-call), from a user gesture
+  // (the mic prompt needs one). No-op on transports without take-over (LiveKit).
+  public async takeOver(): Promise<void> {
+    await this.transport?.takeOver?.();
+  }
+
   public mute(): void {
     if (this.connected) this.transport?.setMicEnabled(false);
   }

@@ -38,22 +38,22 @@ export class GatewayTransport implements Transport {
       throw new Error("gatewayUrl and callId are required for the gateway transport");
     }
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: this.config.captureDeviceId,
-        sampleRate: this.config.sampleRate,
-        channelCount: 1,
-        autoGainControl: true,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-    });
-
     // ICE servers (coturn etc.) come from the backend bootstrap; empty ⇒ direct
     // to the gateway's public host candidate.
     const pc = new RTCPeerConnection({ iceServers: this.config.iceServers || [] });
     this.pc = pc;
-    this.localStream.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
+
+    if (this.config.listener) {
+      // Live-listen: receive-only, no mic. A recvonly transceiver makes the offer
+      // ask for the gateway's mix down-track while offering no uplink, so the
+      // browser hears the room but publishes nothing until takeOver().
+      pc.addTransceiver("audio", { direction: "recvonly" });
+    } else {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        audio: this.micConstraints(),
+      });
+      this.localStream.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
+    }
 
     // Control channel: reserved for the gateway control protocol + (later) the
     // relayed server event stream. Wired now so enabling it is a drop-in.
@@ -106,6 +106,7 @@ export class GatewayTransport implements Transport {
         call_id: this.config.callId,
         identity: this.identity(),
         target: this.config.target || undefined,
+        direction: this.config.direction || undefined,
         sdp: pc.localDescription!.sdp,
       }),
     });
@@ -132,8 +133,69 @@ export class GatewayTransport implements Transport {
 
   public setMicEnabled(enabled: boolean): void {
     // Local track toggle (parity with LiveKit's setMicrophoneEnabled): stops
-    // sending the mic, distinct from the server-side "drop content" mute.
+    // sending the mic, distinct from the server-side "drop content" mute. No-op on
+    // a receive-only listener that hasn't taken over yet (no local track).
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = enabled));
+  }
+
+  // takeOver upgrades a receive-only live-listen session into a talking one: it
+  // opens the mic now (the take-over user gesture) and renegotiates so the uplink
+  // is added to the existing PeerConnection. The backend must have promoted the
+  // session first (POST /v2/take-over-live-call) — otherwise the gateway drops the
+  // uplink audio even after this renegotiation. Idempotent-ish: a second call with
+  // the mic already open is a no-op.
+  public async takeOver(): Promise<void> {
+    if (!this.pc) throw new Error("gateway transport not connected");
+    if (this.localStream) return; // already publishing (took over already)
+
+    this.localStream = await navigator.mediaDevices.getUserMedia({
+      audio: this.micConstraints(),
+    });
+    const track = this.localStream.getAudioTracks()[0];
+
+    // Reuse the recvonly transceiver from connect() (flip to sendrecv) so we keep a
+    // single audio m-line; fall back to addTrack if it isn't there.
+    const audioTx = this.pc
+      .getTransceivers()
+      .find((t) => t.direction === "recvonly");
+    if (audioTx) {
+      await audioTx.sender.replaceTrack(track);
+      audioTx.direction = "sendrecv";
+    } else {
+      this.pc.addTrack(track, this.localStream);
+    }
+
+    // Renegotiate over the WHIP resource: application/sdp offer → SDP answer.
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    const resp = await fetch(
+      `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
+      {
+        method: "PATCH",
+        headers: this.headers({ "Content-Type": "application/sdp" }),
+        body: this.pc.localDescription!.sdp,
+      },
+    );
+    if (!resp.ok) {
+      throw new Error(
+        `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+      );
+    }
+    await this.pc.setRemoteDescription({
+      type: "answer",
+      sdp: await resp.text(),
+    });
+  }
+
+  private micConstraints(): MediaTrackConstraints {
+    return {
+      deviceId: this.config.captureDeviceId,
+      sampleRate: this.config.sampleRate,
+      channelCount: 1,
+      autoGainControl: true,
+      echoCancellation: true,
+      noiseSuppression: true,
+    };
   }
 
   public async resumeAudioPlayback(): Promise<void> {
