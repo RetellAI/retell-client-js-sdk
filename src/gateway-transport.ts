@@ -14,6 +14,14 @@ import {
   TransportHandlers,
 } from "./transport";
 
+// How long to keep retrying the WHIP create while the room does not exist yet,
+// and the backoff between attempts. The agent's orchestrator normally has the
+// room up within a second; the ceiling is generous because the alternative is a
+// call that fails for a reason the user cannot act on.
+const JOIN_TIMEOUT_MS = 15000;
+const JOIN_RETRY_MIN_MS = 150;
+const JOIN_RETRY_MAX_MS = 1000;
+
 export class GatewayTransport implements Transport {
   private config: StartCallConfig;
   private base: string;
@@ -99,23 +107,7 @@ export class GatewayTransport implements Transport {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const resp = await fetch(this.base + "/v1/webrtc/sessions", {
-      method: "POST",
-      headers: this.headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        call_id: this.config.callId,
-        identity: this.identity(),
-        target: this.config.target || undefined,
-        direction: this.config.direction || undefined,
-        sdp: pc.localDescription!.sdp,
-      }),
-    });
-    if (!resp.ok) {
-      throw new Error(
-        `gateway WHIP POST failed: ${resp.status} ${await resp.text()}`,
-      );
-    }
-    const answer = await resp.json();
+    const answer = await this.createSession(pc.localDescription!.sdp);
     this.sessionId = answer.session_id;
 
     // Signaling is established here — fire onConnected (call_started) BEFORE
@@ -129,6 +121,43 @@ export class GatewayTransport implements Transport {
     const flush = this.pendingCandidates;
     this.pendingCandidates = [];
     for (const c of flush) this.sendCandidate(c);
+  }
+
+  // createSession POSTs the offer to the WHIP endpoint, retrying while the room
+  // does not exist yet.
+  //
+  // Unlike LiveKit, a gateway room is not created on join — the agent's
+  // orchestrator creates it, and the browser leg is deliberately not allowed to,
+  // so that a request landing on the wrong instance fails instead of opening an
+  // empty room there. create-web-call returns as soon as the call is queued, so
+  // the browser can easily arrive first and get a 404. That is a "not yet", not a
+  // "no": retry it. Every other status is terminal.
+  private async createSession(
+    sdp: string,
+  ): Promise<{ session_id: string; sdp: string }> {
+    const deadline = Date.now() + JOIN_TIMEOUT_MS;
+    let delay = JOIN_RETRY_MIN_MS;
+    for (;;) {
+      const resp = await fetch(this.base + "/v1/webrtc/sessions", {
+        method: "POST",
+        headers: this.headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          call_id: this.config.callId,
+          identity: this.identity(),
+          target: this.config.target || undefined,
+          direction: this.config.direction || undefined,
+          sdp,
+        }),
+      });
+      if (resp.ok) return await resp.json();
+
+      const body = await resp.text();
+      if (resp.status !== 404 || Date.now() >= deadline) {
+        throw new Error(`gateway WHIP POST failed: ${resp.status} ${body}`);
+      }
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, JOIN_RETRY_MAX_MS);
+    }
   }
 
   public setMicEnabled(enabled: boolean): void {
@@ -236,7 +265,11 @@ export class GatewayTransport implements Transport {
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     const h: Record<string, string> = { ...(extra || {}) };
-    if (this.config.callToken) h["Authorization"] = "Bearer " + this.config.callToken;
+    // On a gateway call the backend returns its browser token in the same
+    // `access_token` field LiveKit used, so accept either name and let callers
+    // pass the response through unchanged.
+    const token = this.config.callToken || this.config.accessToken;
+    if (token) h["Authorization"] = "Bearer " + token;
     return h;
   }
 

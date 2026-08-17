@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Retell Web SDK — gateway demo</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #171a21;
+        --panel-2: #1e222b;
+        --line: #2a2f3a;
+        --text: #e6e8ee;
+        --muted: #9aa3b2;
+        --accent: #6ea8fe;
+        --ok: #4ade80;
+        --warn: #fbbf24;
+        --err: #f87171;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      h2 { font-size: 15px; margin: 0 0 12px; }
+      .sub { color: var(--muted); margin-bottom: 20px; }
+      .wrap { max-width: 1100px; margin: 0 auto; }
+      .grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+      @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+      input {
+        width: 100%;
+        padding: 8px 10px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--text);
+        font: inherit;
+      }
+      input:focus { outline: 1px solid var(--accent); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+      button {
+        padding: 8px 14px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--accent); }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #0b1020; font-weight: 600; }
+      button.danger { border-color: #7f1d1d; color: #fca5a5; }
+      .note {
+        background: #2a2113;
+        border: 1px solid #5c4813;
+        color: #f3d089;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+      .status { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; }
+      .status div { color: var(--muted); }
+      .status b { color: var(--text); font-weight: 600; }
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+      .dot.on { background: var(--ok); }
+      .dot.warn { background: var(--warn); }
+      .dot.err { background: var(--err); }
+      pre#log {
+        margin: 16px 0 0;
+        padding: 12px;
+        background: #0b0d12;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        height: 260px;
+        overflow: auto;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .log-err { color: var(--err); }
+      .log-ok { color: var(--ok); }
+      .log-dim { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Retell Web SDK — gateway demo</h1>
+      <div class="sub">
+        One page, two flows: start a web call, and live-listen / take over a phone
+        call. Both run on whichever transport the backend picks — the SDK follows
+        the response.
+      </div>
+
+      <div class="note">
+        <b>Local testing only.</b> This page sends your API key straight from the
+        browser, which a real integration must never do — mint tokens on your
+        server. Also serve it over <code>http://localhost</code> (e.g.
+        <code>npx serve examples</code>): the mic needs a secure context, and
+        <code>file://</code> is not one.
+      </div>
+
+      <div class="card" style="margin-bottom: 16px">
+        <h2>Backend</h2>
+        <div class="grid">
+          <div>
+            <label for="apiBase">API base URL</label>
+            <input id="apiBase" value="http://localhost:8080" />
+          </div>
+          <div>
+            <label for="apiKey">API key</label>
+            <input id="apiKey" type="password" placeholder="key_..." />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Web call</h2>
+          <div class="sub" style="margin: 0 0 4px; font-size: 13px">
+            <code>POST /v2/create-web-call</code> → join with the returned
+            transport.
+          </div>
+          <label for="agentId">Agent ID</label>
+          <input id="agentId" placeholder="agent_..." />
+          <div class="row">
+            <button class="primary" id="btnStart">Create &amp; join</button>
+            <button id="btnMute" disabled>Mute</button>
+            <button class="danger" id="btnHangup" disabled>Hang up</button>
+          </div>
+          <div class="status">
+            <div><span class="dot" id="dotCall"></span><b id="callState">idle</b></div>
+            <div>transport <b id="callTransport">—</b></div>
+            <div>call <b id="callId">—</b></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Live-listen &amp; take-over</h2>
+          <div class="sub" style="margin: 0 0 4px; font-size: 13px">
+            <code>POST /v2/listen-live-call/:id</code> joins hidden and
+            receive-only; take-over opens the mic on that same connection.
+          </div>
+          <label for="listenCallId">Ongoing call ID</label>
+          <input id="listenCallId" placeholder="call_..." />
+          <div class="row">
+            <button class="primary" id="btnListen">Listen</button>
+            <button id="btnTakeOver" disabled>Take over</button>
+            <button class="danger" id="btnStopListen" disabled>Stop</button>
+          </div>
+          <div class="status">
+            <div><span class="dot" id="dotListen"></span><b id="listenState">idle</b></div>
+            <div>transport <b id="listenTransport">—</b></div>
+            <div>identity <b id="listenIdentity">—</b></div>
+          </div>
+        </div>
+      </div>
+
+      <pre id="log"></pre>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "eventemitter3": "../node_modules/eventemitter3/dist/eventemitter3.esm.js",
+          "livekit-client": "../node_modules/livekit-client/dist/livekit-client.esm.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      // The SDK's ESM build leaves its dependencies external, so the import map
+      // above resolves them from node_modules. Run `npm run build` first.
+      import { RetellWebClient } from "../dist/index.modern.mjs";
+
+      const $ = (id) => document.getElementById(id);
+      const logEl = $("log");
+
+      function log(msg, cls = "") {
+        const t = new Date().toISOString().slice(11, 23);
+        const line = document.createElement("div");
+        if (cls) line.className = cls;
+        line.textContent = `${t}  ${msg}`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      async function api(path, body) {
+        const base = $("apiBase").value.replace(/\/+$/, "");
+        const resp = await fetch(base + path, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + $("apiKey").value.trim(),
+          },
+          body: JSON.stringify(body ?? {}),
+        });
+        const text = await resp.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = text;
+        }
+        if (!resp.ok) {
+          throw new Error(
+            `${path} → ${resp.status} ${typeof parsed === "string" ? parsed : JSON.stringify(parsed)}`,
+          );
+        }
+        return parsed;
+      }
+
+      // The backend decides the transport; the SDK just needs the response
+      // translated into its config. A gateway response carries the instance the
+      // call is pinned to plus the room coordinates; a LiveKit one carries only a
+      // room-scoped token. `access_token` is the same field in both cases — only
+      // its issuer differs.
+      function toStartConfig(resp, extra = {}) {
+        const isGateway = resp.transport === "gateway" || !!resp.gateway_url;
+        if (!isGateway) {
+          return { accessToken: resp.access_token, ...extra };
+        }
+        return {
+          transport: "gateway",
+          gatewayUrl: resp.gateway_url ?? resp.url,
+          callId: resp.gateway_call_id ?? resp.call_id,
+          direction: resp.gateway_direction,
+          accessToken: resp.access_token,
+          ...extra,
+        };
+      }
+
+      function wire(client, prefix, onEnded) {
+        const dot = $(prefix === "call" ? "dotCall" : "dotListen");
+        const state = $(prefix === "call" ? "callState" : "listenState");
+        const set = (text, cls) => {
+          state.textContent = text;
+          dot.className = "dot " + (cls || "");
+        };
+        client.on("call_started", () => { set("connected", "warn"); log(`[${prefix}] call_started`); });
+        client.on("call_ready", () => { set("audio flowing", "on"); log(`[${prefix}] call_ready`, "log-ok"); });
+        client.on("call_ended", () => { set("ended"); log(`[${prefix}] call_ended`, "log-dim"); onEnded?.(); });
+        client.on("error", (e) => { set("error", "err"); log(`[${prefix}] error: ${e}`, "log-err"); });
+        client.on("agent_start_talking", () => log(`[${prefix}] agent_start_talking`, "log-dim"));
+        client.on("agent_stop_talking", () => log(`[${prefix}] agent_stop_talking`, "log-dim"));
+        client.on("update", (u) => {
+          const last = u?.transcript?.[u.transcript.length - 1];
+          if (last) log(`[${prefix}] ${last.role}: ${last.content}`, "log-dim");
+        });
+        return set;
+      }
+
+      // ---- Web call ---------------------------------------------------------
+      let webClient = null;
+      let muted = false;
+
+      $("btnStart").onclick = async () => {
+        if (webClient) return;
+        $("btnStart").disabled = true;
+        try {
+          log("POST /v2/create-web-call …");
+          const resp = await api("/v2/create-web-call", {
+            agent_id: $("agentId").value.trim(),
+          });
+          const transport = resp.transport ?? "livekit";
+          $("callTransport").textContent = transport;
+          $("callId").textContent = resp.call_id ?? "—";
+          log(
+            `created ${resp.call_id} on ${transport}` +
+              (resp.gateway_url ? ` @ ${resp.gateway_url}` : ""),
+            "log-ok",
+          );
+
+          webClient = new RetellWebClient();
+          wire(webClient, "call", () => resetWebCall());
+          await webClient.startCall(toStartConfig(resp));
+          $("btnMute").disabled = false;
+          $("btnHangup").disabled = false;
+        } catch (err) {
+          log(String(err.message ?? err), "log-err");
+          resetWebCall();
+        }
+      };
+
+      $("btnMute").onclick = () => {
+        muted = !muted;
+        muted ? webClient?.mute() : webClient?.unmute();
+        $("btnMute").textContent = muted ? "Unmute" : "Mute";
+        log(`[call] mic ${muted ? "muted" : "unmuted"}`);
+      };
+
+      $("btnHangup").onclick = () => webClient?.stopCall();
+
+      function resetWebCall() {
+        webClient = null;
+        muted = false;
+        $("btnStart").disabled = false;
+        $("btnMute").disabled = true;
+        $("btnMute").textContent = "Mute";
+        $("btnHangup").disabled = true;
+      }
+
+      // ---- Live-listen + take-over -----------------------------------------
+      let listenClient = null;
+      let listenIdentity = null;
+
+      $("btnListen").onclick = async () => {
+        if (listenClient) return;
+        const callId = $("listenCallId").value.trim();
+        if (!callId) return log("enter an ongoing call id first", "log-err");
+        $("btnListen").disabled = true;
+        try {
+          log(`POST /v2/listen-live-call/${callId} …`);
+          const resp = await api(`/v2/listen-live-call/${callId}`);
+          const transport = resp.transport ?? "livekit";
+          // The listener identity is minted by the backend and baked into the
+          // token, so it has to be the identity we join with — and it is what
+          // take-over names later.
+          listenIdentity = resp.participant_id ?? null;
+          $("listenTransport").textContent = transport;
+          $("listenIdentity").textContent = listenIdentity ?? "—";
+          log(`listening on ${transport} as ${listenIdentity ?? "(livekit)"}`, "log-ok");
+
+          listenClient = new RetellWebClient();
+          wire(listenClient, "listen", () => resetListen());
+          await listenClient.startCall(
+            toStartConfig(resp, {
+              listener: true,
+              ...(listenIdentity ? { identity: listenIdentity } : {}),
+            }),
+          );
+          $("btnStopListen").disabled = false;
+          $("btnTakeOver").disabled = transport !== "gateway" || !listenIdentity;
+        } catch (err) {
+          log(String(err.message ?? err), "log-err");
+          resetListen();
+        }
+      };
+
+      $("btnTakeOver").onclick = async () => {
+        const callId = $("listenCallId").value.trim();
+        $("btnTakeOver").disabled = true;
+        try {
+          // Order matters: the backend grants publish and ends the AI's half of
+          // the call first. Only then does the browser open its mic and
+          // renegotiate — before the grant lands the gateway would drop that
+          // audio anyway.
+          log(`POST /v2/take-over-live-call/${callId} …`);
+          await api(`/v2/take-over-live-call/${callId}`, {
+            participant_id: listenIdentity,
+          });
+          log("take-over granted; opening mic", "log-ok");
+          await listenClient.takeOver();
+          log("mic live — you are on the call", "log-ok");
+        } catch (err) {
+          log(String(err.message ?? err), "log-err");
+          $("btnTakeOver").disabled = false;
+        }
+      };
+
+      $("btnStopListen").onclick = () => listenClient?.stopCall();
+
+      function resetListen() {
+        listenClient = null;
+        listenIdentity = null;
+        $("btnListen").disabled = false;
+        $("btnTakeOver").disabled = true;
+        $("btnStopListen").disabled = true;
+      }
+
+      log("ready — fill in the backend fields above", "log-dim");
+    </script>
+  </body>
+</html>

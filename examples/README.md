@@ -1,68 +1,57 @@
-# Local end-to-end: gateway web call
+# Demo page
 
-`gateway-webcall.html` drives a full local chain against the new
-sip-webrtc-gateway WebRTC leg:
+`index.html` exercises both browser-side flows against a running backend:
 
-```
-browser (this page) → POST {backend}/v2/create-web-call-gateway
-                    → SDK gateway transport → local sip-webrtc-gateway (WHIP/Opus)
-```
+- **Web call** — `POST /v2/create-web-call`, then join with whatever transport
+  the backend chose.
+- **Live-listen + take-over** — `POST /v2/listen-live-call/:id` joins a phone call
+  hidden and receive-only; `POST /v2/take-over-live-call/:id` followed by
+  `takeOver()` then opens the mic on that same connection.
 
-The backend's dev-only `/v2/create-web-call-gateway` endpoint mints the per-call
-browser token and returns `{ transport, gatewayUrl, callId, callToken, identity,
-iceServers }`; the SDK auto-selects the gateway transport from those fields.
+The page never picks the transport itself — it reads the backend's response. A
+gateway call comes back with `transport: "gateway"` plus the instance the call is
+pinned to (`gateway_url`) and its room coordinates; a LiveKit call comes back with
+just a room-scoped `access_token`. `toStartConfig()` in the page is the entire
+mapping, about fifteen lines.
 
-## 1. Build the SDK bundle
-
-The published `dist/` keeps `livekit-client` external, so a plain browser can't
-load it directly. Build a self-contained bundle from the local source:
-
-```sh
-npm install            # once, for livekit-client + deps
-npx esbuild src/index.ts --bundle --format=iife --global-name=_retell \
-  --footer:js='window.RetellWebClient=_retell.RetellWebClient' \
-  --outfile=examples/retell-sdk.bundle.js
-```
-
-(Re-run after changing `src/`.)
-
-## 2. Run the gateway (open mode or token mode)
-
-Token mode matches production; its secret/iss must equal the backend's:
+## Running it
 
 ```sh
-# in sip-webrtc-gateway/
-make build
-GATEWAY_LOAD_SECRETS=0 WEBRTC_ENABLED=1 WEBRTC_ICE_PUBLIC_IP=127.0.0.1 \
-  HTTP_LISTEN=127.0.0.1:8088 \
-  GATEWAY_WEB_TOKEN_SECRET=local-dev-web-token-secret-0123456789 \
-  GATEWAY_WEB_TOKEN_ISS=retell-web \
-  ./bin/sip-webrtc-gateway
+npm install       # once
+npm run build     # produces dist/
+npx serve .       # any static server, from the REPO ROOT
+# open http://localhost:3000/examples/
 ```
 
-## 3. Run the backend
+Two constraints on how you serve it:
 
-Start retell-backend in development (`NODE_ENV=development`) with the matching
-gateway vars set (see `.env.development`: `GATEWAY_WEB_TOKEN_SECRET`,
-`GATEWAY_WEB_TOKEN_ISS`, `GATEWAY_BASE_URL_OVERRIDE`). The dev endpoint is only
-mounted when `NODE_ENV !== "production"`.
+- **`http://localhost`, not `file://`.** `getUserMedia` needs a secure context and
+  localhost counts as one; `file://` does not, so the mic just fails there.
+- **Serve from the repo root**, not from `examples/`. The page loads the SDK from
+  `../dist/` and resolves its two dependencies out of `../node_modules/` via an
+  import map, because the published `dist/` deliberately keeps `livekit-client`
+  and `eventemitter3` external. No bundling step — but those paths have to
+  resolve.
 
-## 4. Serve this page + open it
+A page served over https cannot call an http backend or gateway (mixed content),
+which matters as soon as you point this at a deployed environment rather than
+localhost.
 
-`getUserMedia` needs a secure context, so serve over `localhost` (not `file://`):
+## API key
 
-```sh
-python3 -m http.server 8090 --directory examples
-# open http://localhost:8090/gateway-webcall.html
-```
+The page sends your API key straight from the browser. Fine for local testing,
+wrong for anything else: a real integration mints call tokens on its own server
+and hands the browser only the short-lived result.
 
-Set the backend URL, click **Join** (a user gesture — required for mic + audio
-autoplay). To bridge **two tabs** through one room mixer, open the page twice with
-the **same `call_id`** (the field defaults to `local-e2e-1`); both browsers join
-`main_<call_id>` and hear each other. The endpoint honors the posted `call_id` so
-the two legs co-locate.
+## What to expect
 
-> Note: the real agent leg (orchestrator ↔ gateway) is not on `main` yet — it
-> lives on the backend's media-refactor branch. This harness validates
-> browser → backend → gateway (audio + per-call token auth); the AI-agent half
-> comes with that branch.
+A gateway web call takes slightly longer to join than a LiveKit one. The room is
+created by the agent's orchestrator, not by the browser, so the SDK retries the
+WHIP create until the room exists (up to 15s). In the log pane, `call_started` is
+signaling established; `call_ready` is audio actually flowing.
+
+The take-over button only enables on a gateway call — LiveKit take-over goes
+through a different backend path that this page doesn't drive. Order matters
+there: the backend grants publish first, and only then does the browser open its
+mic and renegotiate. The gateway drops uplink audio from a session it hasn't
+promoted, no matter what the browser sends.

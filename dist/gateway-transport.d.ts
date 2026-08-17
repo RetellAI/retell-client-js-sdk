@@ -13,6 +13,7 @@ export declare class GatewayTransport implements Transport {
     private readyFired;
     constructor(config: StartCallConfig);
     connect(handlers: TransportHandlers): Promise<void>;
+    private createSession;
     setMicEnabled(enabled: boolean): void;
     takeOver(): Promise<void>;
     private micConstraints;
