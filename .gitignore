@@ -130,3 +130,5 @@ dist
 .pnp.*
 # built example bundles (regenerate via examples/README.md)
 examples/*.bundle.js
+
+.idea/
