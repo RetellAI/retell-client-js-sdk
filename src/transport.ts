@@ -42,7 +42,9 @@ export interface StartCallConfig {
   sampleRate?: number;
   captureDeviceId?: string; // audio capture (mic) device id
   playbackDeviceId?: string; // audio playback (speaker) sink id
-  emitRawAudioSamples?: boolean; // receive raw float32 agent-audio samples (viz). Default false.
+  // Emit Float32Array analyser snapshots for visualization. These are not
+  // contiguous PCM frames. Defaults to false.
+  emitRawAudioSamples?: boolean;
 }
 
 // AnalyzerComponent mirrors livekit-client's createAudioAnalyser return shape, so
