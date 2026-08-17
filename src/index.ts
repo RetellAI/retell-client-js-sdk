@@ -16,8 +16,7 @@ export {
 } from "./transport";
 
 export interface RetellClientOptions {
-  // Fallback transport when a call's config neither specifies nor implies one.
-  // Handy for QA to force a transport without backend changes. Default "livekit".
+  // Used when a call's config neither specifies nor implies a transport.
   defaultTransport?: TransportKind;
 }
 
@@ -42,7 +41,6 @@ export class RetellWebClient extends EventEmitter {
 
   public async startCall(startCallConfig: StartCallConfig): Promise<void> {
     try {
-      // A call runs on exactly one transport, chosen once here.
       const kind = selectTransport(startCallConfig, this.defaultTransport);
       this.transport =
         kind === "gateway"
@@ -56,7 +54,6 @@ export class RetellWebClient extends EventEmitter {
           this.emit("call_started");
         },
         onCallReady: (analyzer) => {
-          // Agent audio flowing; can be used to stop a loading animation.
           this.emit("call_ready");
           if (analyzer) {
             this.analyzerComponent = analyzer;
@@ -72,7 +69,6 @@ export class RetellWebClient extends EventEmitter {
     } catch (err) {
       this.emit("error", "Error starting call");
       console.error("Error starting call", err);
-      // Cleanup
       this.stopCall();
     }
   }
@@ -89,8 +85,7 @@ export class RetellWebClient extends EventEmitter {
     this.connected = false;
     if (wasConnected) this.emit("call_ended");
 
-    // Always release transport resources (mic, PeerConnection/Room), even if the
-    // call failed before it fully connected.
+    // Release mic / PeerConnection even if the call never fully connected.
     this.transport?.close();
     this.transport = undefined;
 
@@ -106,10 +101,9 @@ export class RetellWebClient extends EventEmitter {
     }
   }
 
-  // Live-listen take-over: on a receive-only listener call (startCall with
-  // listener:true), open the mic and start talking to the caller. Call AFTER the
-  // backend take-over succeeds (POST /v2/take-over-live-call), from a user gesture
-  // (the mic prompt needs one). No-op on transports without take-over (LiveKit).
+  // On a listener call, open the mic and start talking to the caller. Call after
+  // the backend take-over succeeds, from a user gesture (the mic prompt needs
+  // one). No-op on LiveKit.
   public async takeOver(): Promise<void> {
     await this.transport?.takeOver?.();
   }
@@ -133,8 +127,7 @@ export class RetellWebClient extends EventEmitter {
     );
   }
 
-  // Server-published events (LiveKit today; gateway once it relays orchestrator
-  // data onto the WebRTC data channel). Mapping is transport-agnostic.
+  // Server-published events; transport-agnostic mapping.
   private handleServerEvent(event: any): void {
     if (event?.event_type === "update") {
       this.emit("update", event);

@@ -185,8 +185,8 @@
       }
     </script>
     <script type="module">
-      // The SDK's ESM build leaves its dependencies external, so the import map
-      // above resolves them from node_modules. Run `npm run build` first.
+      // The SDK's ESM build keeps its dependencies external; the import map above
+      // resolves them from node_modules. Run `npm run build` first.
       import { RetellWebClient } from "../dist/index.modern.mjs";
 
       const $ = (id) => document.getElementById(id);
@@ -209,10 +209,9 @@
           headers: {
             "Content-Type": "application/json",
             Authorization: "Bearer " + $("apiKey").value.trim(),
-            // The dashboard endpoints (live-listen, take-over) authenticate with a
-            // user JWT, which identifies a person, not an org — and a person can
-            // belong to several. So the org has to be named separately. An API key
-            // already carries its org, and ignores this.
+            // The dashboard endpoints authenticate a user, and a user can belong
+            // to several orgs, so the org is named separately. An API key already
+            // carries its own and ignores this.
             ...(orgId ? { orgId } : {}),
           },
           body: JSON.stringify(body ?? {}),
@@ -232,11 +231,8 @@
         return parsed;
       }
 
-      // The backend decides the transport; the SDK just needs the response
-      // translated into its config. A gateway response carries the instance the
-      // call is pinned to plus the room coordinates; a LiveKit one carries only a
-      // room-scoped token. `access_token` is the same field in both cases — only
-      // its issuer differs.
+      // The backend decides the transport; this just translates its response.
+      // `access_token` is the same field either way — only its issuer differs.
       function toStartConfig(resp, extra = {}) {
         const isGateway = resp.transport === "gateway" || !!resp.gateway_url;
         if (!isGateway) {
@@ -248,13 +244,9 @@
           callId: resp.gateway_call_id ?? resp.call_id,
           direction: resp.gateway_direction,
           accessToken: resp.access_token,
-          // The gateway checks the join identity against the token's claim, so it
-          // has to be the one the backend minted for — never a client-side default.
+          // Must be the identity the backend minted for: the gateway checks it
+          // against the token's claim.
           ...(resp.participant_id ? { identity: resp.participant_id } : {}),
-          // ICE servers must be in hand before the PeerConnection is built; they
-          // cannot be added later. A live-listen browser depends on them: with no
-          // mic grant, Chrome only offers .local mDNS candidates, which are
-          // unresolvable outside its own network.
           ...(resp.ice_servers?.length ? { iceServers: resp.ice_servers } : {}),
           ...extra,
         };
@@ -270,9 +262,8 @@
         client.on("call_started", () => { set("connected", "warn"); log(`[${prefix}] call_started`); });
         client.on("call_ready", () => { set("audio flowing", "on"); log(`[${prefix}] call_ready`, "log-ok"); });
         client.on("call_ended", () => { set("ended"); log(`[${prefix}] call_ended`, "log-dim"); onEnded?.(); });
-        // startCall swallows its exception and emits `error`, and stopCall only
-        // emits call_ended if the call had connected — so a join that fails
-        // outright produces `error` and nothing else. Reset here too, or the
+        // startCall swallows its exception and emits `error`, and stopCall emits
+        // call_ended only if the call had connected — so reset here too, or the
         // buttons stay stuck on a call that never happened.
         client.on("error", (e) => {
           set("error", "err");
@@ -351,9 +342,6 @@
           log(`POST /v2/listen-live-call/${callId} …`);
           const resp = await api(`/v2/listen-live-call/${callId}`);
           const transport = resp.transport ?? "livekit";
-          // The listener identity is minted by the backend and baked into the
-          // token, so it has to be the identity we join with — and it is what
-          // take-over names later.
           listenIdentity = resp.participant_id ?? null;
           $("listenTransport").textContent = transport;
           $("listenIdentity").textContent = listenIdentity ?? "—";
@@ -368,9 +356,8 @@
             }),
           );
           $("btnStopListen").disabled = false;
-          // Take-over is gateway-only here: on LiveKit it runs through a
-          // different backend path this page doesn't drive. Say so rather than
-          // leaving a dead button.
+          // Gateway-only: LiveKit take-over runs through a backend path this page
+          // does not drive.
           const canTakeOver = transport === "gateway" && !!listenIdentity;
           $("btnTakeOver").disabled = !canTakeOver;
           if (!canTakeOver) {
@@ -391,10 +378,8 @@
         const callId = $("listenCallId").value.trim();
         $("btnTakeOver").disabled = true;
         try {
-          // Order matters: the backend grants publish and ends the AI's half of
-          // the call first. Only then does the browser open its mic and
-          // renegotiate — before the grant lands the gateway would drop that
-          // audio anyway.
+          // Backend first: it grants publish and ends the AI's half. Audio sent
+          // before that grant lands is dropped by the gateway anyway.
           log(`POST /v2/take-over-live-call/${callId} …`);
           await api(`/v2/take-over-live-call/${callId}`, {
             participant_id: listenIdentity,

@@ -1,11 +1,7 @@
-// GatewayTransport: browser leg over the sip-webrtc-gateway WebRTC endpoint
-// (WHIP-style signaling: POST/PATCH/DELETE /v1/webrtc/sessions). P1 is audio-only:
-// mic up (Opus), agent audio down (the room mix), mute (local track), trickle ICE.
-//
-// The server→client event stream (update/metadata/agent_*_talking/node_transition)
-// is NOT delivered yet — it needs the gateway to relay orchestrator data onto the
-// WebRTC data channel. The data channel + onData hook are wired here so that phase
-// is a drop-in; until then only audio flows.
+// Browser leg over the gateway's WHIP endpoints (POST/PATCH/DELETE
+// /v1/webrtc/sessions). Audio only: the server→client event stream needs the
+// gateway to relay orchestrator data onto the data channel, which it does not do
+// yet — the channel and onData hook are wired so that stays a drop-in.
 
 import {
   AnalyzerComponent,
@@ -14,25 +10,15 @@ import {
   TransportHandlers,
 } from "./transport";
 
-// How long to keep retrying the WHIP create while the room does not exist yet,
-// and the backoff between attempts. The agent's orchestrator normally has the
-// room up within a second; the ceiling is generous because the alternative is a
-// call that fails for a reason the user cannot act on.
+// Retry window for the WHIP create while the room does not exist yet.
 const JOIN_TIMEOUT_MS = 15000;
 const JOIN_RETRY_MIN_MS = 150;
 const JOIN_RETRY_MAX_MS = 1000;
 
-// Default ICE servers, used when the backend does not supply its own.
-//
-// STUN only — one binding request/response, no media relayed. It exists for the
-// live-listen case: that browser never opens its mic, so Chrome keeps its host
-// addresses behind .local mDNS names, which are meaningless outside the browser's
-// own network. STUN is what turns that into a real, reachable candidate.
-//
-// A public server is fine for this because the address is a constant, not a
-// secret. TURN would be different: its credentials are short-lived and computed
-// per call, which is why config.iceServers can override this — a deployment that
-// needs relaying supplies its own list rather than shipping a new SDK.
+// STUN only, and only needed by live-listen: that browser never opens its mic, so
+// Chrome hides its addresses behind .local mDNS names that mean nothing outside
+// its own network. Overridable via config.iceServers — TURN credentials are
+// short-lived and per-call, so they cannot be baked in here.
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
 ];
@@ -61,7 +47,6 @@ export class GatewayTransport implements Transport {
       throw new Error("gatewayUrl and callId are required for the gateway transport");
     }
 
-    // Backend-supplied servers win; otherwise the STUN default above.
     const pc = new RTCPeerConnection({
       iceServers: this.config.iceServers?.length
         ? this.config.iceServers
@@ -70,9 +55,7 @@ export class GatewayTransport implements Transport {
     this.pc = pc;
 
     if (this.config.listener) {
-      // Live-listen: receive-only, no mic. A recvonly transceiver makes the offer
-      // ask for the gateway's mix down-track while offering no uplink, so the
-      // browser hears the room but publishes nothing until takeOver().
+      // Receive-only: asks for the room mix while offering no uplink.
       pc.addTransceiver("audio", { direction: "recvonly" });
     } else {
       this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -81,8 +64,6 @@ export class GatewayTransport implements Transport {
       this.localStream.getTracks().forEach((t) => pc.addTrack(t, this.localStream!));
     }
 
-    // Control channel: reserved for the gateway control protocol + (later) the
-    // relayed server event stream. Wired now so enabling it is a drop-in.
     const dc = pc.createDataChannel("control");
     this.dc = dc;
     dc.onmessage = (ev) => {
@@ -128,28 +109,23 @@ export class GatewayTransport implements Transport {
     const answer = await this.createSession(pc.localDescription!.sdp);
     this.sessionId = answer.session_id;
 
-    // Signaling is established here — fire onConnected (call_started) BEFORE
-    // applying the answer, since setRemoteDescription synchronously fires ontrack
-    // (call_ready). This preserves the LiveKit ordering: call_started → call_ready.
+    // Before applying the answer: setRemoteDescription fires ontrack
+    // synchronously, and call_started must precede call_ready as it does on
+    // LiveKit.
     handlers.onConnected();
 
     await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });
 
-    // Flush candidates gathered before we had the session id; later ones go direct.
+    // Candidates gathered before we had a session id; later ones go direct.
     const flush = this.pendingCandidates;
     this.pendingCandidates = [];
     for (const c of flush) this.sendCandidate(c);
   }
 
-  // createSession POSTs the offer to the WHIP endpoint, retrying while the room
-  // does not exist yet.
-  //
-  // Unlike LiveKit, a gateway room is not created on join — the agent's
-  // orchestrator creates it, and the browser leg is deliberately not allowed to,
-  // so that a request landing on the wrong instance fails instead of opening an
-  // empty room there. create-web-call returns as soon as the call is queued, so
-  // the browser can easily arrive first and get a 404. That is a "not yet", not a
-  // "no": retry it. Every other status is terminal.
+  // A gateway room is created by the agent's orchestrator, not on join, and
+  // create-web-call returns as soon as the call is queued — so the browser
+  // routinely arrives first and gets a 404. That is "not yet", not "no"; every
+  // other status is terminal.
   private async createSession(
     sdp: string,
   ): Promise<{ session_id: string; sdp: string }> {
@@ -178,19 +154,14 @@ export class GatewayTransport implements Transport {
     }
   }
 
+  // Local track toggle, as LiveKit's setMicrophoneEnabled does — distinct from
+  // the server-side mute. No-op on a listener that has not taken over.
   public setMicEnabled(enabled: boolean): void {
-    // Local track toggle (parity with LiveKit's setMicrophoneEnabled): stops
-    // sending the mic, distinct from the server-side "drop content" mute. No-op on
-    // a receive-only listener that hasn't taken over yet (no local track).
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = enabled));
   }
 
-  // takeOver upgrades a receive-only live-listen session into a talking one: it
-  // opens the mic now (the take-over user gesture) and renegotiates so the uplink
-  // is added to the existing PeerConnection. The backend must have promoted the
-  // session first (POST /v2/take-over-live-call) — otherwise the gateway drops the
-  // uplink audio even after this renegotiation. Idempotent-ish: a second call with
-  // the mic already open is a no-op.
+  // Opens the mic and renegotiates the existing PeerConnection. The backend must
+  // have promoted the session first, or the gateway drops the uplink regardless.
   public async takeOver(): Promise<void> {
     if (!this.pc) throw new Error("gateway transport not connected");
     if (this.localStream) return; // already publishing (took over already)
@@ -200,8 +171,7 @@ export class GatewayTransport implements Transport {
     });
     const track = this.localStream.getAudioTracks()[0];
 
-    // Reuse the recvonly transceiver from connect() (flip to sendrecv) so we keep a
-    // single audio m-line; fall back to addTrack if it isn't there.
+    // Flip the recvonly transceiver to sendrecv, keeping a single audio m-line.
     const audioTx = this.pc
       .getTransceivers()
       .find((t) => t.direction === "recvonly");
@@ -212,7 +182,6 @@ export class GatewayTransport implements Transport {
       this.pc.addTrack(track, this.localStream);
     }
 
-    // Renegotiate over the WHIP resource: application/sdp offer → SDP answer.
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
     const resp = await fetch(
@@ -251,7 +220,7 @@ export class GatewayTransport implements Transport {
 
   public close(): void {
     if (this.sessionId) {
-      // Best-effort hangup; fire-and-forget so close() stays synchronous.
+      // Fire-and-forget so close() stays synchronous.
       fetch(`${this.base}/v1/webrtc/sessions/${this.sessionId}`, {
         method: "DELETE",
         headers: this.headers(),
@@ -283,9 +252,8 @@ export class GatewayTransport implements Transport {
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     const h: Record<string, string> = { ...(extra || {}) };
-    // On a gateway call the backend returns its browser token in the same
-    // `access_token` field LiveKit used, so accept either name and let callers
-    // pass the response through unchanged.
+    // The backend returns the gateway token in the same `access_token` field
+    // LiveKit used, so accept either name.
     const token = this.config.callToken || this.config.accessToken;
     if (token) h["Authorization"] = "Bearer " + token;
     return h;
@@ -324,15 +292,13 @@ export class GatewayTransport implements Transport {
   }
 }
 
-// createGatewayAnalyser builds an AnalyzerComponent (livekit createAudioAnalyser
-// shape) from a raw MediaStreamTrack using the Web Audio API.
+// AnalyzerComponent (livekit createAudioAnalyser shape) from a raw track.
 function createGatewayAnalyser(track: MediaStreamTrack): AnalyzerComponent {
   const Ctor: typeof AudioContext =
     (window as any).AudioContext || (window as any).webkitAudioContext;
   const ctx = new Ctor();
-  // A freshly created AudioContext starts "suspended" and won't pull samples until
-  // resumed (needs a user gesture in some browsers). Best-effort resume so the
-  // analyser produces data; playback is unaffected (it goes via the <audio> element).
+  // A fresh AudioContext starts suspended and pulls no samples until resumed.
+  // Playback is unaffected either way — that goes via the <audio> element.
   ctx.resume().catch(() => {});
   const source = ctx.createMediaStreamSource(new MediaStream([track]));
   const analyser = ctx.createAnalyser();

@@ -1,41 +1,29 @@
-// Transport abstraction: a call runs on exactly ONE transport (LiveKit or the
-// gateway), chosen once at startCall. There is no mid-call switching and no
-// per-call bridging — the two transports simply coexist in the SDK and are
-// selected per call. Both feed the same high-level handlers, so the public
-// RetellWebClient events stay identical regardless of transport.
+// A call runs on exactly one transport, chosen once at startCall. Both feed the
+// same handlers, so the public RetellWebClient events are identical either way.
 
 export type TransportKind = "livekit" | "gateway";
 
 export interface StartCallConfig {
-  // --- LiveKit transport ---
-  accessToken?: string; // LiveKit access token (room-scoped JWT)
+  // --- LiveKit ---
+  accessToken?: string; // room-scoped JWT
 
-  // --- Gateway (WHIP) transport ---
-  gatewayUrl?: string; // gateway base URL, e.g. "https://gw.example.com"
+  // --- Gateway (WHIP) ---
+  gatewayUrl?: string; // gateway base URL
   callId?: string; // locates the room the browser joins
-  callToken?: string; // per-call short-lived JWT, sent as Bearer to the WHIP endpoint
-  identity?: string; // participant identity; defaults to "web-<callId>"
+  callToken?: string; // per-call JWT, sent as Bearer (accessToken also accepted)
+  identity?: string; // must match the token's identity claim
   target?: string; // room target, default "main"
-  direction?: "inbound" | "outbound"; // room direction; must match the agent leg
-  // ICE servers for the browser's PeerConnection. Must be set when the connection
-  // is created — they cannot be added later — so they ride the bootstrap response
-  // rather than the WHIP answer.
-  //
-  // Omit to use the SDK's default (public STUN), which is what a live-listen
-  // session needs: with no mic grant Chrome only offers .local mDNS candidates,
-  // unresolvable outside its own network. Supply a list to override — a
-  // deployment with its own STUN, or TURN with short-lived credentials, passes
-  // them here instead of shipping a new SDK.
+  direction?: "inbound" | "outbound"; // must match the agent leg
+  // Must be set when the connection is created; they cannot be added later.
+  // Omit for the SDK's public-STUN default — which live-listen depends on, since
+  // without a mic grant Chrome only offers unroutable .local candidates.
   iceServers?: RTCIceServer[];
 
-  // --- Transport selection (backend-authoritative, caller-overridable) ---
-  // Explicit `transport` wins; otherwise inferred from which fields are present
-  // (gateway if gateway fields, else livekit), then the client's defaultTransport.
+  // Explicit transport wins; otherwise inferred from which fields are present,
+  // then the client's defaultTransport.
   transport?: TransportKind;
 
-  // Live-listen (gateway only): join receive-only — hear the room mix without
-  // opening the mic. No audio is published until takeOver() (the dashboard
-  // take-over) opens the mic and renegotiates. Ignored by the LiveKit transport.
+  // Gateway only: join receive-only, publishing nothing until takeOver().
   listener?: boolean;
 
   // --- Common audio options ---
@@ -47,21 +35,20 @@ export interface StartCallConfig {
   emitRawAudioSamples?: boolean;
 }
 
-// AnalyzerComponent mirrors livekit-client's createAudioAnalyser return shape, so
-// the RetellWebClient's raw-sample loop is transport-agnostic.
+// Mirrors livekit-client's createAudioAnalyser shape, so the client's raw-sample
+// loop is transport-agnostic.
 export interface AnalyzerComponent {
   calculateVolume: () => number;
   analyser: AnalyserNode;
   cleanup: () => Promise<void>;
 }
 
-// TransportHandlers are wired by RetellWebClient before connect(); a transport
-// invokes them and the client turns them into public EventEmitter events.
+// Wired by RetellWebClient before connect(); it turns these into public events.
 export interface TransportHandlers {
-  onConnected: () => void; // signaling/session established → call_started
-  onCallReady: (analyzer: AnalyzerComponent | null) => void; // agent audio flowing → call_ready
-  onData: (event: any) => void; // server data event (LiveKit today; gateway in a later phase)
-  onDisconnected: () => void; // transport dropped → stopCall / call_ended
+  onConnected: () => void; // signaling established → call_started
+  onCallReady: (analyzer: AnalyzerComponent | null) => void; // → call_ready
+  onData: (event: any) => void; // server data event (LiveKit only, so far)
+  onDisconnected: () => void; // → stopCall / call_ended
   onError: (message: string) => void; // → error
 }
 
@@ -70,14 +57,11 @@ export interface Transport {
   setMicEnabled(enabled: boolean): void;
   resumeAudioPlayback(): Promise<void>;
   close(): void;
-  // Live-listen take-over (gateway only): open the mic on a receive-only session
-  // and renegotiate so audio starts flowing. The backend must have promoted the
-  // session first (POST /v2/take-over-live-call). No-op/absent on LiveKit.
+  // Gateway only: open the mic on a receive-only session and renegotiate. The
+  // backend must have promoted the session first.
   takeOver?(): Promise<void>;
 }
 
-// selectTransport resolves the transport for a call. Explicit config wins, then
-// inference from present fields, then the client-level fallback.
 export function selectTransport(
   config: StartCallConfig,
   fallback: TransportKind,
