@@ -240,6 +240,11 @@
           // The gateway checks the join identity against the token's claim, so it
           // has to be the one the backend minted for — never a client-side default.
           ...(resp.participant_id ? { identity: resp.participant_id } : {}),
+          // ICE servers must be in hand before the PeerConnection is built; they
+          // cannot be added later. A live-listen browser depends on them: with no
+          // mic grant, Chrome only offers .local mDNS candidates, which are
+          // unresolvable outside its own network.
+          ...(resp.ice_servers?.length ? { iceServers: resp.ice_servers } : {}),
           ...extra,
         };
       }

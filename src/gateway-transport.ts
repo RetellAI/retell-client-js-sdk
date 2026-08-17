@@ -22,6 +22,21 @@ const JOIN_TIMEOUT_MS = 15000;
 const JOIN_RETRY_MIN_MS = 150;
 const JOIN_RETRY_MAX_MS = 1000;
 
+// Default ICE servers, used when the backend does not supply its own.
+//
+// STUN only — one binding request/response, no media relayed. It exists for the
+// live-listen case: that browser never opens its mic, so Chrome keeps its host
+// addresses behind .local mDNS names, which are meaningless outside the browser's
+// own network. STUN is what turns that into a real, reachable candidate.
+//
+// A public server is fine for this because the address is a constant, not a
+// secret. TURN would be different: its credentials are short-lived and computed
+// per call, which is why config.iceServers can override this — a deployment that
+// needs relaying supplies its own list rather than shipping a new SDK.
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+];
+
 export class GatewayTransport implements Transport {
   private config: StartCallConfig;
   private base: string;
@@ -46,9 +61,12 @@ export class GatewayTransport implements Transport {
       throw new Error("gatewayUrl and callId are required for the gateway transport");
     }
 
-    // ICE servers (coturn etc.) come from the backend bootstrap; empty ⇒ direct
-    // to the gateway's public host candidate.
-    const pc = new RTCPeerConnection({ iceServers: this.config.iceServers || [] });
+    // Backend-supplied servers win; otherwise the STUN default above.
+    const pc = new RTCPeerConnection({
+      iceServers: this.config.iceServers?.length
+        ? this.config.iceServers
+        : DEFAULT_ICE_SERVERS,
+    });
     this.pc = pc;
 
     if (this.config.listener) {

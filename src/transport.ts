@@ -17,10 +17,15 @@ export interface StartCallConfig {
   identity?: string; // participant identity; defaults to "web-<callId>"
   target?: string; // room target, default "main"
   direction?: "inbound" | "outbound"; // room direction; must match the agent leg
-  // ICE servers for the browser's PeerConnection, provided by the backend at
-  // bootstrap (e.g. coturn with short-lived HMAC creds) for UDP-hostile networks.
-  // Must be set at PC-create time, so it rides the bootstrap, not the WHIP answer.
-  // Omit/empty ⇒ direct connection to the gateway's public host candidate.
+  // ICE servers for the browser's PeerConnection. Must be set when the connection
+  // is created — they cannot be added later — so they ride the bootstrap response
+  // rather than the WHIP answer.
+  //
+  // Omit to use the SDK's default (public STUN), which is what a live-listen
+  // session needs: with no mic grant Chrome only offers .local mDNS candidates,
+  // unresolvable outside its own network. Supply a list to override — a
+  // deployment with its own STUN, or TURN with short-lived credentials, passes
+  // them here instead of shipping a new SDK.
   iceServers?: RTCIceServer[];
 
   // --- Transport selection (backend-authoritative, caller-overridable) ---
