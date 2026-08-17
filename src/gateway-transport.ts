@@ -5,10 +5,6 @@ import {
   TransportHandlers,
 } from "./transport";
 
-const JOIN_TIMEOUT_MS = 15000;
-const JOIN_RETRY_MIN_MS = 150;
-const JOIN_RETRY_MAX_MS = 1000;
-
 // Live-listen needs this: with no mic grant Chrome offers only .local mDNS
 // candidates, unroutable outside its own network.
 const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
@@ -112,35 +108,29 @@ export class GatewayTransport implements Transport {
     for (const c of flush) this.sendCandidate(c);
   }
 
-  // create-web-call only queues the agent's join, so the room may not exist yet
-  // when the browser gets its token: a 404 means "not yet" and is retried. Every
-  // other status is terminal.
+  // The browser may arrive before the agent — create-web-call only queues that
+  // join — and the gateway creates the room for a valid token, so there is
+  // nothing to wait for.
   private async createSession(
     sdp: string,
   ): Promise<{ session_id: string; sdp: string }> {
-    const deadline = Date.now() + JOIN_TIMEOUT_MS;
-    let delay = JOIN_RETRY_MIN_MS;
-    for (;;) {
-      const resp = await fetch(this.base + "/v1/webrtc/sessions", {
-        method: "POST",
-        headers: this.headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          call_id: this.config.callId,
-          identity: this.identity(),
-          target: this.config.target || undefined,
-          direction: this.config.direction || undefined,
-          sdp,
-        }),
-      });
-      if (resp.ok) return await resp.json();
-
-      const body = await resp.text();
-      if (resp.status !== 404 || Date.now() >= deadline) {
-        throw new Error(`gateway WHIP POST failed: ${resp.status} ${body}`);
-      }
-      await new Promise((r) => setTimeout(r, delay));
-      delay = Math.min(delay * 2, JOIN_RETRY_MAX_MS);
+    const resp = await fetch(this.base + "/v1/webrtc/sessions", {
+      method: "POST",
+      headers: this.headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        call_id: this.config.callId,
+        identity: this.identity(),
+        target: this.config.target || undefined,
+        direction: this.config.direction || undefined,
+        sdp,
+      }),
+    });
+    if (!resp.ok) {
+      throw new Error(
+        `gateway WHIP POST failed: ${resp.status} ${await resp.text()}`,
+      );
     }
+    return await resp.json();
   }
 
   // Local track toggle, distinct from the server-side mute.
