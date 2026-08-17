@@ -185,8 +185,8 @@
       }
     </script>
     <script type="module">
-      // The SDK's ESM build keeps its dependencies external; the import map above
-      // resolves them from node_modules. Run `npm run build` first.
+      // Run `npm run build` first — the import map above resolves the SDK's
+      // external dependencies from node_modules.
       import { RetellWebClient } from "../dist/index.modern.mjs";
 
       const $ = (id) => document.getElementById(id);
@@ -209,9 +209,8 @@
           headers: {
             "Content-Type": "application/json",
             Authorization: "Bearer " + $("apiKey").value.trim(),
-            // The dashboard endpoints authenticate a user, and a user can belong
-            // to several orgs, so the org is named separately. An API key already
-            // carries its own and ignores this.
+            // Dashboard endpoints authenticate a user, who may belong to several
+            // orgs. An API key carries its own and ignores this.
             ...(orgId ? { orgId } : {}),
           },
           body: JSON.stringify(body ?? {}),
@@ -231,7 +230,6 @@
         return parsed;
       }
 
-      // The backend decides the transport; this just translates its response.
       // `access_token` is the same field either way — only its issuer differs.
       function toStartConfig(resp, extra = {}) {
         const isGateway = resp.transport === "gateway" || !!resp.gateway_url;
@@ -244,8 +242,7 @@
           callId: resp.gateway_call_id ?? resp.call_id,
           direction: resp.gateway_direction,
           accessToken: resp.access_token,
-          // Must be the identity the backend minted for: the gateway checks it
-          // against the token's claim.
+          // The gateway checks this against the token's claim.
           ...(resp.participant_id ? { identity: resp.participant_id } : {}),
           ...(resp.ice_servers?.length ? { iceServers: resp.ice_servers } : {}),
           ...extra,
@@ -262,9 +259,8 @@
         client.on("call_started", () => { set("connected", "warn"); log(`[${prefix}] call_started`); });
         client.on("call_ready", () => { set("audio flowing", "on"); log(`[${prefix}] call_ready`, "log-ok"); });
         client.on("call_ended", () => { set("ended"); log(`[${prefix}] call_ended`, "log-dim"); onEnded?.(); });
-        // startCall swallows its exception and emits `error`, and stopCall emits
-        // call_ended only if the call had connected — so reset here too, or the
-        // buttons stay stuck on a call that never happened.
+        // startCall swallows its exception, and call_ended only fires if the call
+        // had connected — so reset here too, or the buttons stay stuck.
         client.on("error", (e) => {
           set("error", "err");
           log(`[${prefix}] error: ${e}`, "log-err");
@@ -356,8 +352,7 @@
             }),
           );
           $("btnStopListen").disabled = false;
-          // Gateway-only: LiveKit take-over runs through a backend path this page
-          // does not drive.
+          // LiveKit take-over runs through a backend path this page doesn't drive.
           const canTakeOver = transport === "gateway" && !!listenIdentity;
           $("btnTakeOver").disabled = !canTakeOver;
           if (!canTakeOver) {
@@ -378,8 +373,7 @@
         const callId = $("listenCallId").value.trim();
         $("btnTakeOver").disabled = true;
         try {
-          // Backend first: it grants publish and ends the AI's half. Audio sent
-          // before that grant lands is dropped by the gateway anyway.
+          // Backend first: audio sent before its grant lands is dropped anyway.
           log(`POST /v2/take-over-live-call/${callId} …`);
           await api(`/v2/take-over-live-call/${callId}`, {
             participant_id: listenIdentity,

@@ -101,9 +101,8 @@ export class RetellWebClient extends EventEmitter {
     }
   }
 
-  // On a listener call, open the mic and start talking to the caller. Call after
-  // the backend take-over succeeds, from a user gesture (the mic prompt needs
-  // one). No-op on LiveKit.
+  // Call after the backend take-over succeeds, from a user gesture (the mic
+  // prompt needs one). No-op on LiveKit.
   public async takeOver(): Promise<void> {
     await this.transport?.takeOver?.();
   }
@@ -127,7 +126,6 @@ export class RetellWebClient extends EventEmitter {
     );
   }
 
-  // Server-published events; transport-agnostic mapping.
   private handleServerEvent(event: any): void {
     if (event?.event_type === "update") {
       this.emit("update", event);

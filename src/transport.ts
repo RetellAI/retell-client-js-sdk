@@ -1,5 +1,5 @@
-// A call runs on exactly one transport, chosen once at startCall. Both feed the
-// same handlers, so the public RetellWebClient events are identical either way.
+// A call runs on exactly one transport, chosen once at startCall — no mid-call
+// switching. Both feed the same handlers, so the public events are identical.
 
 export type TransportKind = "livekit" | "gateway";
 
@@ -19,8 +19,6 @@ export interface StartCallConfig {
   // without a mic grant Chrome only offers unroutable .local candidates.
   iceServers?: RTCIceServer[];
 
-  // Explicit transport wins; otherwise inferred from which fields are present,
-  // then the client's defaultTransport.
   transport?: TransportKind;
 
   // Gateway only: join receive-only, publishing nothing until takeOver().
@@ -35,15 +33,13 @@ export interface StartCallConfig {
   emitRawAudioSamples?: boolean;
 }
 
-// Mirrors livekit-client's createAudioAnalyser shape, so the client's raw-sample
-// loop is transport-agnostic.
+// Mirrors livekit-client's createAudioAnalyser shape.
 export interface AnalyzerComponent {
   calculateVolume: () => number;
   analyser: AnalyserNode;
   cleanup: () => Promise<void>;
 }
 
-// Wired by RetellWebClient before connect(); it turns these into public events.
 export interface TransportHandlers {
   onConnected: () => void; // signaling established → call_started
   onCallReady: (analyzer: AnalyzerComponent | null) => void; // → call_ready
@@ -57,8 +53,7 @@ export interface Transport {
   setMicEnabled(enabled: boolean): void;
   resumeAudioPlayback(): Promise<void>;
   close(): void;
-  // Gateway only: open the mic on a receive-only session and renegotiate. The
-  // backend must have promoted the session first.
+  // Gateway only; the backend must have promoted the session first.
   takeOver?(): Promise<void>;
 }
 
