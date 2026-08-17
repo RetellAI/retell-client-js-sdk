@@ -37,6 +37,45 @@ A page served over https cannot call an http backend or gateway (mixed content),
 which matters as soon as you point this at a deployed environment rather than
 localhost.
 
+## Testing without a backend
+
+You can exercise the whole gateway path with just the gateway and its
+`mock-worker` (which stands in for the orchestrator: it opens the WS, sends
+`connect_room` — creating the room — and streams a 440Hz tone as agent audio).
+Stub the two backend calls in the page with a `fetch` override, and point
+`take-over-live-call` at the gateway's `POST /v1/webrtc/sessions/promote`, which
+is what the backend calls anyway.
+
+```sh
+# in sip-webrtc-gateway/
+make build mock-worker
+GATEWAY_LOAD_SECRETS=0 WEBRTC_ENABLED=1 DEV_SKIP_AUTH=1 GATEWAY_SBC_ROUTING=0 \
+  WEBRTC_ICE_PUBLIC_IP=127.0.0.1 HTTP_LISTEN=127.0.0.1:8088 \
+  GATEWAY_WEB_TOKEN_SECRET=local-dev-web-token-secret-0123456789 \
+  ./bin/sip-webrtc-gateway
+
+./bin/mock-worker -ws ws://127.0.0.1:8088/ws -call-id demo-1 \
+  -direction outbound -identity server -send-tone
+
+# mint what the backend would have minted
+curl -X POST http://127.0.0.1:8088/v1/webrtc/tokens -H 'Content-Type: application/json' \
+  -d '{"call_id":"demo-1","identity":"client","can_publish":true}'
+```
+
+Two things worth knowing when you do this:
+
+- **The join identity must match the token's identity claim.** The gateway
+  rejects a mismatch with 403, so the backend returns the identity it minted for
+  (`participant_id`) and the client joins as exactly that.
+- **The room has to exist first.** Start `mock-worker` before joining, or rely on
+  the SDK's retry window — it is 15s, which is easy to overrun if you are driving
+  the page by hand.
+
+`mock-worker`'s `last_rms` line is the uplink: it goes non-zero once browser audio
+reaches the mixer. That is also how you can see a live-listen session being
+gated — it stays at 0 while the listener is hidden, and starts moving the moment
+take-over promotes it.
+
 ## API key
 
 The page sends your API key straight from the browser. Fine for local testing,

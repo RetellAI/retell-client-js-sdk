@@ -237,6 +237,9 @@
           callId: resp.gateway_call_id ?? resp.call_id,
           direction: resp.gateway_direction,
           accessToken: resp.access_token,
+          // The gateway checks the join identity against the token's claim, so it
+          // has to be the one the backend minted for — never a client-side default.
+          ...(resp.participant_id ? { identity: resp.participant_id } : {}),
           ...extra,
         };
       }
@@ -251,7 +254,15 @@
         client.on("call_started", () => { set("connected", "warn"); log(`[${prefix}] call_started`); });
         client.on("call_ready", () => { set("audio flowing", "on"); log(`[${prefix}] call_ready`, "log-ok"); });
         client.on("call_ended", () => { set("ended"); log(`[${prefix}] call_ended`, "log-dim"); onEnded?.(); });
-        client.on("error", (e) => { set("error", "err"); log(`[${prefix}] error: ${e}`, "log-err"); });
+        // startCall swallows its exception and emits `error`, and stopCall only
+        // emits call_ended if the call had connected — so a join that fails
+        // outright produces `error` and nothing else. Reset here too, or the
+        // buttons stay stuck on a call that never happened.
+        client.on("error", (e) => {
+          set("error", "err");
+          log(`[${prefix}] error: ${e}`, "log-err");
+          onEnded?.();
+        });
         client.on("agent_start_talking", () => log(`[${prefix}] agent_start_talking`, "log-dim"));
         client.on("agent_stop_talking", () => log(`[${prefix}] agent_stop_talking`, "log-dim"));
         client.on("update", (u) => {
