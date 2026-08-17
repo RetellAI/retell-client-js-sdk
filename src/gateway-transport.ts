@@ -112,8 +112,9 @@ export class GatewayTransport implements Transport {
     for (const c of flush) this.sendCandidate(c);
   }
 
-  // The room is created by the orchestrator, not on join, so a 404 here means
-  // "not yet" and is retried. Every other status is terminal.
+  // create-web-call only queues the agent's join, so the room may not exist yet
+  // when the browser gets its token: a 404 means "not yet" and is retried. Every
+  // other status is terminal.
   private async createSession(
     sdp: string,
   ): Promise<{ session_id: string; sdp: string }> {
