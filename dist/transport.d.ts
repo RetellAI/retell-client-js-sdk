@@ -1,14 +1,11 @@
 export type TransportKind = "livekit" | "gateway";
 export interface StartCallConfig {
     accessToken?: string;
-    gatewayUrl?: string;
-    callId?: string;
-    callToken?: string;
-    identity?: string;
-    target?: string;
-    direction?: "inbound" | "outbound";
-    iceServers?: RTCIceServer[];
     transport?: TransportKind;
+    callId?: string;
+    identity?: string;
+    apiHost?: string;
+    iceServers?: RTCIceServer[];
     listener?: boolean;
     sampleRate?: number;
     captureDeviceId?: string;

@@ -4,22 +4,28 @@
 export type TransportKind = "livekit" | "gateway";
 
 export interface StartCallConfig {
-  // --- LiveKit ---
-  accessToken?: string; // room-scoped JWT
+  // The API's `access_token`, whichever transport issued it. Both transports
+  // carry the room in the token, so neither needs to be told a room name.
+  accessToken?: string;
+  // The API's `transport`. Say it rather than letting the SDK guess: the two
+  // tokens are indistinguishable, and guessing wrong means handing a gateway
+  // token to LiveKit.
+  transport?: TransportKind;
 
   // --- Gateway (WHIP) ---
-  gatewayUrl?: string; // gateway base URL
-  callId?: string; // locates the room the browser joins
-  callToken?: string; // per-call JWT, sent as Bearer (accessToken also accepted)
-  identity?: string; // must match the token's identity claim
-  target?: string; // room target, default "main"
-  direction?: "inbound" | "outbound"; // must match the agent leg
+  // The API's `call_id`. Required for gateway calls: signaling is addressed by
+  // call, and the room it resolves to is settled server side.
+  callId?: string;
+  // The API's `participant_id`. Defaults to the identity create-web-call mints
+  // for, so only live-listen has to pass one.
+  identity?: string;
+  // Overrides the Retell host signaling is sent to. For local development only —
+  // production needs no address, the same way the LiveKit transport needs none.
+  apiHost?: string;
   // Must be set when the connection is created; they cannot be added later.
   // Omit for the SDK's public-STUN default — which live-listen depends on, since
   // without a mic grant Chrome only offers unroutable .local candidates.
   iceServers?: RTCIceServer[];
-
-  transport?: TransportKind;
 
   // Gateway only: join receive-only, publishing nothing until takeOver().
   listener?: boolean;
@@ -57,12 +63,11 @@ export interface Transport {
   takeOver?(): Promise<void>;
 }
 
+// The API's `transport` decides — nothing else can. Both transports deliver their
+// token in `accessToken`, and neither is handed an address to give it away.
 export function selectTransport(
   config: StartCallConfig,
   fallback: TransportKind,
 ): TransportKind {
-  if (config.transport) return config.transport;
-  if (config.gatewayUrl || config.callToken) return "gateway";
-  if (config.accessToken) return "livekit";
-  return fallback;
+  return config.transport ?? fallback;
 }

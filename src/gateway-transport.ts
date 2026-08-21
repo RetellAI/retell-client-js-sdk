@@ -11,6 +11,19 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
 ];
 
+// The identity create-web-call mints the browser token for. The gateway rejects a
+// join whose identity doesn't match the token's claim, so this is the only
+// workable default — live-listen passes its own.
+const WEB_CALL_IDENTITY = "client";
+
+// Signaling goes to Retell, which relays it to the gateway holding the call:
+// gateways answer on a private address, so a browser cannot reach one. Media does
+// not come back through here — it goes straight to whatever the SDP answer
+// advertises. Known the same way LIVEKIT_HOST is; `apiHost` overrides it for
+// local development.
+const RETELL_API_HOST = "https://api.retellai.com";
+const WEBRTC_PROXY_PREFIX = "/webrtc-proxy";
+
 export class GatewayTransport implements Transport {
   private config: StartCallConfig;
   private base: string;
@@ -26,13 +39,14 @@ export class GatewayTransport implements Transport {
 
   constructor(config: StartCallConfig) {
     this.config = config;
-    this.base = (config.gatewayUrl || "").replace(/\/+$/, "");
+    const host = (config.apiHost || RETELL_API_HOST).replace(/\/+$/, "");
+    this.base = `${host}${WEBRTC_PROXY_PREFIX}/${config.callId}`;
   }
 
   public async connect(handlers: TransportHandlers): Promise<void> {
     this.handlers = handlers;
-    if (!this.base || !this.config.callId) {
-      throw new Error("gatewayUrl and callId are required for the gateway transport");
+    if (!this.config.callId) {
+      throw new Error("callId is required for the gateway transport");
     }
 
     const pc = new RTCPeerConnection({
@@ -117,13 +131,9 @@ export class GatewayTransport implements Transport {
     const resp = await fetch(this.base + "/v1/webrtc/sessions", {
       method: "POST",
       headers: this.headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify({
-        call_id: this.config.callId,
-        identity: this.identity(),
-        target: this.config.target || undefined,
-        direction: this.config.direction || undefined,
-        sdp,
-      }),
+      // No room coordinates: Retell fills them in from the call record, so the
+      // browser never has to be told which room its call lives in.
+      body: JSON.stringify({ identity: this.identity(), sdp }),
     });
     if (!resp.ok) {
       throw new Error(
@@ -225,14 +235,14 @@ export class GatewayTransport implements Transport {
   }
 
   private identity(): string {
-    return this.config.identity || `web-${this.config.callId}`;
+    return this.config.identity || WEB_CALL_IDENTITY;
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
     const h: Record<string, string> = { ...(extra || {}) };
-    // The backend returns the gateway token in LiveKit's `access_token` field.
-    const token = this.config.callToken || this.config.accessToken;
-    if (token) h["Authorization"] = "Bearer " + token;
+    if (this.config.accessToken) {
+      h["Authorization"] = "Bearer " + this.config.accessToken;
+    }
     return h;
   }
 
