@@ -120,7 +120,7 @@
         <div class="grid">
           <div>
             <label for="apiBase">API base URL</label>
-            <input id="apiBase" value="http://localhost:8080" />
+            <input id="apiBase" value="http://localhost:3002" />
           </div>
           <div>
             <label for="apiKey">API key <span style="opacity:.6">— or a dashboard JWT, for live-listen</span></label>
@@ -201,8 +201,10 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
 
+      const apiBase = () => $("apiBase").value.trim().replace(/\/+$/, "");
+
       async function api(path, body) {
-        const base = $("apiBase").value.replace(/\/+$/, "");
+        const base = apiBase();
         const orgId = $("orgId").value.trim();
         const resp = await fetch(base + path, {
           method: "POST",
@@ -238,10 +240,13 @@
         }
         return {
           transport: "gateway",
-          gatewayUrl: resp.gateway_url ?? resp.url,
           callId: resp.gateway_call_id ?? resp.call_id,
-          direction: resp.gateway_direction,
           accessToken: resp.access_token,
+          // Signaling is relayed by the backend that created the call, so it has
+          // to follow the API base above. Production needs no address — the SDK
+          // defaults to api.retellai.com — but this page runs against a local
+          // backend, where omitting it would send the SDP to production instead.
+          apiHost: apiBase(),
           // The gateway checks this against the token's claim.
           ...(resp.participant_id ? { identity: resp.participant_id } : {}),
           ...(resp.ice_servers?.length ? { iceServers: resp.ice_servers } : {}),
@@ -348,9 +353,13 @@
           await listenClient.startCall(
             toStartConfig(resp, {
               listener: true,
+              // listen-live-call returns no call id; signaling is addressed by it.
+              callId,
               ...(listenIdentity ? { identity: listenIdentity } : {}),
             }),
           );
+          // startCall swallows its exception; resetListen already ran on error.
+          if (!listenClient) return;
           $("btnStopListen").disabled = false;
           // LiveKit take-over runs through a backend path this page doesn't drive.
           const canTakeOver = transport === "gateway" && !!listenIdentity;
