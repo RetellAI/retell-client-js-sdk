@@ -236,7 +236,8 @@
       function toStartConfig(resp, extra = {}) {
         const isGateway = resp.transport === "gateway" || !!resp.gateway_url;
         if (!isGateway) {
-          return { accessToken: resp.access_token, ...extra };
+          // live-listen names its own server; create-web-call does not.
+          return { accessToken: resp.access_token, url: resp.url, ...extra };
         }
         return {
           transport: "gateway",
@@ -361,14 +362,11 @@
           // startCall swallows its exception; resetListen already ran on error.
           if (!listenClient) return;
           $("btnStopListen").disabled = false;
-          // LiveKit take-over runs through a backend path this page doesn't drive.
-          const canTakeOver = transport === "gateway" && !!listenIdentity;
+          const canTakeOver = !!listenIdentity;
           $("btnTakeOver").disabled = !canTakeOver;
           if (!canTakeOver) {
             log(
-              transport !== "gateway"
-                ? `take-over unavailable: this call is on ${transport}, not the gateway`
-                : "take-over unavailable: the backend returned no participant_id",
+              "take-over unavailable: the backend returned no participant_id",
               "log-dim",
             );
           }

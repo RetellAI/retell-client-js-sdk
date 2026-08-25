@@ -6,6 +6,7 @@ export interface StartCallConfig {
     identity?: string;
     apiHost?: string;
     iceServers?: RTCIceServer[];
+    url?: string;
     listener?: boolean;
     sampleRate?: number;
     captureDeviceId?: string;

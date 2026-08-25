@@ -27,7 +27,12 @@ export interface StartCallConfig {
   // without a mic grant Chrome only offers unroutable .local candidates.
   iceServers?: RTCIceServer[];
 
-  // Gateway only: join receive-only, publishing nothing until takeOver().
+  // --- LiveKit ---
+  // The API's `url`. Live-listen is scoped to the room's own server, so its
+  // response names one; create-web-call does not, and the default stands.
+  url?: string;
+
+  // Join receive-only, publishing nothing until takeOver(). On both transports.
   listener?: boolean;
 
   // --- Common audio options ---
@@ -59,7 +64,8 @@ export interface Transport {
   setMicEnabled(enabled: boolean): void;
   resumeAudioPlayback(): Promise<void>;
   close(): void;
-  // Gateway only; the backend must have promoted the session first.
+  // The backend must have granted publish first; this opens the mic on the
+  // connection already established by a listener join.
   takeOver?(): Promise<void>;
 }
 
