@@ -127,6 +127,14 @@ export class RetellWebClient extends EventEmitter {
   }
 
   private handleServerEvent(event: any): void {
+    // The gateway's control channel uses its own envelope, not `event_type`.
+    if (event?.type === "status") {
+      if (event.state === "ended" || event.state === "replaced") {
+        this.stopCall();
+      }
+      return;
+    }
+
     if (event?.event_type === "update") {
       this.emit("update", event);
     } else if (event?.event_type === "metadata") {
