@@ -1,29 +1,23 @@
 import { EventEmitter } from "eventemitter3";
-export interface StartCallConfig {
-    accessToken: string;
-    sampleRate?: number;
-    captureDeviceId?: string;
-    playbackDeviceId?: string;
-    emitRawAudioSamples?: boolean;
+import { AnalyzerComponent, StartCallConfig, TransportKind } from "./transport";
+export { StartCallConfig, TransportKind, AnalyzerComponent, } from "./transport";
+export interface RetellClientOptions {
+    defaultTransport?: TransportKind;
 }
 export declare class RetellWebClient extends EventEmitter {
-    private room;
+    private transport?;
     private connected;
+    private defaultTransport;
     isAgentTalking: boolean;
-    analyzerComponent: {
-        calculateVolume: () => number;
-        analyser: AnalyserNode;
-        cleanup: () => Promise<void>;
-    };
-    private captureAudioFrame;
-    constructor();
+    analyzerComponent?: AnalyzerComponent;
+    private captureAudioFrame?;
+    constructor(options?: RetellClientOptions);
     startCall(startCallConfig: StartCallConfig): Promise<void>;
     startAudioPlayback(): Promise<void>;
     stopCall(): void;
+    takeOver(): Promise<void>;
     mute(): void;
     unmute(): void;
     private captureAudioSamples;
-    private handleRoomEvents;
-    private handleAudioEvents;
-    private handleDataEvents;
+    private handleServerEvent;
 }
