@@ -15,6 +15,7 @@ export interface WebCallOptions extends CreateWebCallRequest {
 export class WebCallSession extends CallSession {
   constructor(api: ControlApi, options: WebCallOptions) {
     super(api, options.hooks);
+    if (options.transcript) this.nodeTransitionSource = "monitor";
     queueMicrotask(() => void this.start(options));
   }
 

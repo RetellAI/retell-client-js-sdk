@@ -28,12 +28,12 @@ export class MonitorSession extends CallSession {
   // The end frame we survived on the strength of takeOverRequested; if the
   // request then fails (someone else won), it was the real end after all.
   private pendingEnd?: CallEndedEvent;
-  protected nodeTransitionSource = "monitor" as const;
 
   constructor(api: ControlApi, options: MonitorCallOptions) {
     super(api, options.hooks);
     this.callId = options.call_id;
     this.audio = options.audio;
+    if (options.transcript !== false) this.nodeTransitionSource = "monitor";
     queueMicrotask(() => {
       if (this.ended) return;
       if (options.transcript === false) this.setStatus("monitoring");
@@ -54,6 +54,15 @@ export class MonitorSession extends CallSession {
       });
     }
     return this.listening;
+  }
+
+  // Drop the audio and go back to transcript only. Not after a take-over:
+  // by then our audio is the call.
+  public stopListening(): void {
+    if (this.status !== "listening") return;
+    this.dropTransport();
+    this.participantId = undefined;
+    this.setStatus("monitoring");
   }
 
   // Silence the AI and talk to the caller ourselves. Irreversible.

@@ -16,9 +16,9 @@ export declare class MonitorSession extends CallSession {
     private takingOver?;
     private takeOverRequested;
     private pendingEnd?;
-    protected nodeTransitionSource: "monitor";
     constructor(api: ControlApi, options: MonitorCallOptions);
     listen(): Promise<void>;
+    stopListening(): void;
     takeOver(): Promise<void>;
     mute(): void;
     unmute(): void;

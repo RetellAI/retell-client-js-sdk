@@ -61,6 +61,7 @@ const watch = client.monitorCall({
 });
 
 await watch.listen();      // join the audio, receive-only
+watch.stopListening();     // back to transcript only
 await watch.takeOver();    // silence the AI and talk to the caller (irreversible)
 await watch.update({ call_control: { additional_context: "...", trigger_response: true } });
 await watch.end();         // hang up for everyone

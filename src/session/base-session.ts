@@ -49,7 +49,8 @@ export abstract class CallSession extends EventEmitter<SessionEventMap> {
 
   protected transport?: Transport;
   protected ended = false;
-  // A transition can arrive on both paths; each session type picks one.
+  // A transition can arrive on both paths. The transcript stream wins when
+  // it is on: its item carries the node ids; the data channel is the fallback.
   protected nodeTransitionSource: "data" | "monitor" = "data";
   private socket?: MonitorSocket;
   private store = new TranscriptStore();
