@@ -1,152 +1,17 @@
-import { EventEmitter } from "eventemitter3";
-import {
-  AnalyzerComponent,
-  StartCallConfig,
-  Transport,
-  TransportKind,
-  selectTransport,
-} from "./transport";
-import { LiveKitTransport } from "./livekit-transport";
-import { GatewayTransport } from "./gateway-transport";
-
-export {
-  StartCallConfig,
-  TransportKind,
-  AnalyzerComponent,
-} from "./transport";
-
-export interface RetellClientOptions {
-  // Used when a call's config neither specifies nor implies a transport.
-  defaultTransport?: TransportKind;
-}
-
-export class RetellWebClient extends EventEmitter {
-  private transport?: Transport;
-  private connected: boolean = false;
-  private defaultTransport: TransportKind;
-
-  // Helper nodes and variables to analyze and animate based on audio
-  public isAgentTalking: boolean = false;
-
-  // Analyser node for agent audio, only available when emitRawAudioSamples is
-  // true. Can directly use / modify this for visualization. Contains a
-  // calculateVolume helper to get the current volume.
-  public analyzerComponent?: AnalyzerComponent;
-  private captureAudioFrame?: number;
-
-  constructor(options: RetellClientOptions = {}) {
-    super();
-    this.defaultTransport = options.defaultTransport || "livekit";
-  }
-
-  public async startCall(startCallConfig: StartCallConfig): Promise<void> {
-    try {
-      const kind = selectTransport(startCallConfig, this.defaultTransport);
-      this.transport =
-        kind === "gateway"
-          ? new GatewayTransport(startCallConfig)
-          : new LiveKitTransport(startCallConfig);
-
-      await this.transport.connect({
-        onConnected: () => {
-          if (this.connected) return;
-          this.connected = true;
-          this.emit("call_started");
-        },
-        onCallReady: (analyzer) => {
-          this.emit("call_ready");
-          if (analyzer) {
-            this.analyzerComponent = analyzer;
-            this.captureAudioFrame = window.requestAnimationFrame(() =>
-              this.captureAudioSamples(),
-            );
-          }
-        },
-        onData: (event) => this.handleServerEvent(event),
-        onDisconnected: () => this.stopCall(),
-        onError: (message) => this.emit("error", message),
-      });
-    } catch (err) {
-      this.emit("error", "Error starting call");
-      console.error("Error starting call", err);
-      this.stopCall();
-    }
-  }
-
-  // Optional.
-  // Some browsers do not support audio playback without user interaction.
-  // Call this function inside a click/tap handler to start audio playback.
-  public async startAudioPlayback(): Promise<void> {
-    await this.transport?.resumeAudioPlayback();
-  }
-
-  public stopCall(): void {
-    const wasConnected = this.connected;
-    this.connected = false;
-    if (wasConnected) this.emit("call_ended");
-
-    // Release mic / PeerConnection even if the call never fully connected.
-    this.transport?.close();
-    this.transport = undefined;
-
-    this.isAgentTalking = false;
-
-    if (this.analyzerComponent) {
-      this.analyzerComponent.cleanup();
-      this.analyzerComponent = undefined;
-    }
-    if (this.captureAudioFrame) {
-      window.cancelAnimationFrame(this.captureAudioFrame);
-      this.captureAudioFrame = undefined;
-    }
-  }
-
-  // Call after the backend take-over succeeds, from a user gesture (the mic
-  // prompt needs one). No-op on LiveKit.
-  public async takeOver(): Promise<void> {
-    await this.transport?.takeOver?.();
-  }
-
-  public mute(): void {
-    if (this.connected) this.transport?.setMicEnabled(false);
-  }
-
-  public unmute(): void {
-    if (this.connected) this.transport?.setMicEnabled(true);
-  }
-
-  private captureAudioSamples() {
-    if (!this.connected || !this.analyzerComponent) return;
-    let bufferLength = this.analyzerComponent.analyser.fftSize;
-    let dataArray = new Float32Array(bufferLength);
-    this.analyzerComponent.analyser.getFloatTimeDomainData(dataArray);
-    this.emit("audio", dataArray);
-    this.captureAudioFrame = window.requestAnimationFrame(() =>
-      this.captureAudioSamples(),
-    );
-  }
-
-  private handleServerEvent(event: any): void {
-    // The gateway's control channel uses its own envelope, not `event_type`.
-    if (event?.type === "status") {
-      if (event.state === "ended" || event.state === "replaced") {
-        this.stopCall();
-      }
-      return;
-    }
-
-    if (event?.event_type === "update") {
-      this.emit("update", event);
-    } else if (event?.event_type === "metadata") {
-      this.emit("metadata", event);
-    } else if (event?.event_type === "agent_start_talking") {
-      this.isAgentTalking = true;
-      this.emit("agent_start_talking");
-    } else if (event?.event_type === "agent_stop_talking") {
-      this.isAgentTalking = false;
-      this.emit("agent_stop_talking");
-    } else if (event?.event_type === "node_transition") {
-      this.emit("node_transition", event);
-    }
-  }
-}
+export { RetellClient } from "./client";
+export type { RetellClientConfig } from "./client";
+export { CallSession } from "./session/base-session";
+export type { AudioOptions } from "./session/base-session";
+export { WebCallSession } from "./session/web-call-session";
+export type { WebCallOptions } from "./session/web-call-session";
+export { MonitorSession } from "./session/monitor-session";
+export type { MonitorCallOptions } from "./session/monitor-session";
+export type {
+  SessionEvent,
+  SessionEventMap,
+  SessionHooks,
+  SessionStatus,
+} from "./session/events";
+export { RetellApiError } from "./control/api";
+export type { AnalyzerComponent, TransportKind } from "./transport";
+export * from "./types";

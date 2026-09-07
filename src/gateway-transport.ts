@@ -19,7 +19,7 @@ const WEB_CALL_IDENTITY = "client";
 // Signaling goes to Retell, which relays it to the gateway holding the call:
 // gateways answer on a private address, so a browser cannot reach one. Media does
 // not come back through here — it goes straight to whatever the SDP answer
-// advertises. Known the same way LIVEKIT_HOST is; `apiHost` overrides it for
+// advertises. Known the same way LIVEKIT_HOST is; `baseURL` overrides it for
 // local development.
 const RETELL_API_HOST = "https://api.retellai.com";
 const WEBRTC_PROXY_PREFIX = "/webrtc-proxy";
@@ -39,7 +39,7 @@ export class GatewayTransport implements Transport {
 
   constructor(config: StartCallConfig) {
     this.config = config;
-    const host = (config.apiHost || RETELL_API_HOST).replace(/\/+$/, "");
+    const host = (config.baseURL || RETELL_API_HOST).replace(/\/+$/, "");
     this.base = `${host}${WEBRTC_PROXY_PREFIX}/${config.callId}`;
   }
 

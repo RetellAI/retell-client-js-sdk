@@ -1,5 +1,5 @@
-// A call runs on exactly one transport, chosen once at startCall — no mid-call
-// switching. Both feed the same handlers, so the public events are identical.
+// A call runs on exactly one transport, chosen once when the session connects —
+// no mid-call switching. Both feed the same handlers, so the events are identical.
 
 export type TransportKind = "livekit" | "gateway";
 
@@ -19,9 +19,8 @@ export interface StartCallConfig {
   // The API's `participant_id`. Defaults to the identity create-web-call mints
   // for, so only live-listen has to pass one.
   identity?: string;
-  // Overrides the Retell host signaling is sent to. For local development only —
-  // production needs no address, the same way the LiveKit transport needs none.
-  apiHost?: string;
+  // Where signaling goes; defaults to https://api.retellai.com.
+  baseURL?: string;
   // Must be set when the connection is created; they cannot be added later.
   // Omit for the SDK's public-STUN default — which live-listen depends on, since
   // without a mic grant Chrome only offers unroutable .local candidates.

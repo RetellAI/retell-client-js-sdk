@@ -4,7 +4,7 @@ export interface StartCallConfig {
     transport?: TransportKind;
     callId?: string;
     identity?: string;
-    apiHost?: string;
+    baseURL?: string;
     iceServers?: RTCIceServer[];
     url?: string;
     listener?: boolean;
