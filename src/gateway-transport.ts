@@ -4,6 +4,7 @@ import {
   Transport,
   TransportHandlers,
 } from "./transport";
+import { SDK_VERSION } from "./version";
 
 // Live-listen needs this: with no mic grant Chrome offers only .local mDNS
 // candidates, unroutable outside its own network.
@@ -248,7 +249,10 @@ export class GatewayTransport implements Transport {
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
-    const h: Record<string, string> = { ...(extra || {}) };
+    const h: Record<string, string> = {
+      "X-Retell-Client-JS-SDK-Version": SDK_VERSION,
+      ...(extra || {}),
+    };
     if (this.config.accessToken) {
       h["Authorization"] = "Bearer " + this.config.accessToken;
     }
