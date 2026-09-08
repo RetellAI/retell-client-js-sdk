@@ -33,7 +33,9 @@ export class RetellWebClient extends EventEmitter {
   // Analyser node for agent audio, only available when emitRawAudioSamples is
   // true. Can directly use / modify this for visualization. Contains a
   // calculateVolume helper to get the current volume.
-  public analyzerComponent?: AnalyzerComponent;
+  // Declared as in 2.0.8 (non-optional) so strict consumers keep compiling;
+  // it is only set between call_ready and stopCall.
+  public analyzerComponent!: AnalyzerComponent;
   private captureAudioFrame?: number;
 
   constructor(options: RetellClientOptions = {}) {
@@ -95,7 +97,8 @@ export class RetellWebClient extends EventEmitter {
 
     if (this.analyzerComponent) {
       this.analyzerComponent.cleanup();
-      this.analyzerComponent = undefined;
+      (this as { analyzerComponent?: AnalyzerComponent }).analyzerComponent =
+        undefined;
     }
     if (this.captureAudioFrame) {
       window.cancelAnimationFrame(this.captureAudioFrame);

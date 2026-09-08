@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "commonjs",
     "declaration": true,
-    "removeComments": true,
+    "removeComments": false,
     "allowSyntheticDefaultImports": true,
     "target": "es2017",
     "sourceMap": false,
@@ -10,6 +10,13 @@
     "baseUrl": "./",
     "incremental": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "test", "lib", "**/*spec.ts"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "test",
+    "lib",
+    "**/*spec.ts"
+  ]
 }
