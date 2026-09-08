@@ -157,15 +157,24 @@ export class ControlApi {
   // Once per client. Console only here; sessions surface "min" as `error`.
   private checkVersion(resp: Response): void {
     if (this.versionChecked) return;
-    const min = resp.headers.get(MIN_VERSION_HEADER);
-    if (!min) return;
+    // Not every response carries them: auth rejections happen before the
+    // middleware that sets them, and a custom fetch may strip them.
+    const min = header(resp, MIN_VERSION_HEADER);
+    const recommended = header(resp, RECOMMENDED_VERSION_HEADER) || min;
+    if (!min && !recommended) return;
     this.versionChecked = true;
-    const recommended = resp.headers.get(RECOMMENDED_VERSION_HEADER) || min;
     let level: VersionStatus["level"] | undefined;
-    if (compareVersions(SDK_VERSION, min) < 0) level = "min";
-    else if (compareVersions(SDK_VERSION, recommended) < 0) level = "recommended";
+    if (min && compareVersions(SDK_VERSION, min) < 0) level = "min";
+    else if (recommended && compareVersions(SDK_VERSION, recommended) < 0) {
+      level = "recommended";
+    }
     if (!level) return;
-    this.version = { level, current: SDK_VERSION, min, recommended };
+    this.version = {
+      level,
+      current: SDK_VERSION,
+      min: min || recommended!,
+      recommended: recommended!,
+    };
     console.error(
       "%c" + versionMessage(this.version),
       "font-weight:bold;font-size:1.2em",
@@ -187,9 +196,23 @@ function errorMessage(data: unknown, resp: Response): string {
   return `${resp.status} ${resp.statusText}`.trim();
 }
 
+function header(resp: Response, name: string): string | undefined {
+  const v = resp.headers?.get?.(name);
+  return v ? v.trim() : undefined;
+}
+
+// Numeric per segment ("3.10.0" > "3.9.0"), missing segments are 0, a
+// leading "v" and any prerelease/build suffix ("-beta.1", "+sha") are ignored.
 function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+  const parse = (v: string) =>
+    v
+      .trim()
+      .replace(/^v/i, "")
+      .split(/[-+]/)[0]
+      .split(".")
+      .map((n) => parseInt(n, 10) || 0);
+  const pa = parse(a);
+  const pb = parse(b);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] || 0) - (pb[i] || 0);
     if (d !== 0) return d;
