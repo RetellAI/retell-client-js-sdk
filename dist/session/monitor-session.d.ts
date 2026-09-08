@@ -1,4 +1,4 @@
-import { ControlApi } from "../control/api";
+import { ControlApi, RequestOptions } from "../control/api";
 import { CallEndedEvent } from "../types";
 import { AudioOptions, CallSession } from "./base-session";
 import { SessionHooks } from "./events";
@@ -17,12 +17,12 @@ export declare class MonitorSession extends CallSession {
     private takeOverRequested;
     private pendingEnd?;
     constructor(api: ControlApi, options: MonitorCallOptions);
-    listen(): Promise<void>;
+    listen(opts?: RequestOptions): Promise<void>;
     stopListening(): void;
-    takeOver(): Promise<void>;
+    takeOver(opts?: RequestOptions): Promise<void>;
     mute(): void;
     unmute(): void;
-    end(): Promise<void>;
+    end(opts?: RequestOptions): Promise<void>;
     protected onMonitorAttached(): void;
     protected monitorEnded(event: CallEndedEvent): void;
     private doListen;

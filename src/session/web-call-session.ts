@@ -5,6 +5,8 @@ import { SessionHooks } from "./events";
 
 export interface WebCallOptions extends CreateWebCallRequest {
   hooks?: SessionHooks;
+  // When the public key has reCAPTCHA enabled: a fresh v3 token for this call.
+  recaptchaToken?: string;
   // Also stream the transcript. Needs Call.Write, which a public key scoped
   // to web calls alone won't have — off unless asked for.
   transcript?: boolean;
@@ -33,11 +35,11 @@ export class WebCallSession extends CallSession {
   }
 
   private async start(options: WebCallOptions): Promise<void> {
-    const { hooks, transcript, audio, ...request } = options;
+    const { hooks, transcript, audio, recaptchaToken, ...request } = options;
     try {
       let resp;
       try {
-        resp = await this.api.createWebCall(request);
+        resp = await this.api.createWebCall(request, { recaptchaToken });
       } finally {
         this.reportVersion();
       }

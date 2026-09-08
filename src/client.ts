@@ -1,4 +1,4 @@
-import { ControlApi } from "./control/api";
+import { ControlApi, RequestOptions } from "./control/api";
 import { MonitorCallOptions, MonitorSession } from "./session/monitor-session";
 import { WebCallOptions, WebCallSession } from "./session/web-call-session";
 import { RetellAuth, UpdateLiveCallRequest } from "./types";
@@ -35,14 +35,15 @@ export class RetellClient {
   }
 
   // Control without a session, e.g. from a server.
-  public stopCall(callId: string): Promise<void> {
-    return this.api.stopCall(callId);
+  public stopCall(callId: string, opts?: RequestOptions): Promise<void> {
+    return this.api.stopCall(callId, opts);
   }
 
   public updateLiveCall(
     callId: string,
     body: UpdateLiveCallRequest,
+    opts?: RequestOptions,
   ): Promise<void> {
-    return this.api.updateLiveCall(callId, body);
+    return this.api.updateLiveCall(callId, body, opts);
   }
 }

@@ -1,4 +1,4 @@
-import { ControlApi } from "../control/api";
+import { ControlApi, RequestOptions } from "../control/api";
 import { CallEndedEvent } from "../types";
 import { AudioOptions, CallSession } from "./base-session";
 import { SessionHooks } from "./events";
@@ -43,13 +43,13 @@ export class MonitorSession extends CallSession {
 
   // Join the call's audio, receive-only and hidden. Call from a user gesture:
   // rejects if the browser blocks playback, leaving the session as it was.
-  public listen(): Promise<void> {
+  public listen(opts?: RequestOptions): Promise<void> {
     if (this.status === "listening" || this.status === "taken_over") {
       return Promise.resolve();
     }
     if (this.ended) return Promise.reject(new Error("Session has ended"));
     if (!this.listening) {
-      this.listening = this.doListen().finally(() => {
+      this.listening = this.doListen(opts).finally(() => {
         this.listening = undefined;
       });
     }
@@ -66,11 +66,14 @@ export class MonitorSession extends CallSession {
   }
 
   // Silence the AI and talk to the caller ourselves. Irreversible.
-  public takeOver(): Promise<void> {
+  // From `monitoring` this joins the audio first; a token is single-use, so
+  // it goes to the take-over request — call listen() yourself if that needs
+  // one too.
+  public takeOver(opts?: RequestOptions): Promise<void> {
     if (this.status === "taken_over") return Promise.resolve();
     if (this.ended) return Promise.reject(new Error("Session has ended"));
     if (!this.takingOver) {
-      this.takingOver = this.doTakeOver().finally(() => {
+      this.takingOver = this.doTakeOver(opts).finally(() => {
         this.takingOver = undefined;
       });
     }
@@ -88,9 +91,11 @@ export class MonitorSession extends CallSession {
 
   // Hang up for everyone. After a take-over there is no AI leg left to stop;
   // our leaving is what ends it.
-  public async end(): Promise<void> {
+  public async end(opts?: RequestOptions): Promise<void> {
     if (this.ended) return;
-    if (this.status !== "taken_over") await this.api.stopCall(this.callId);
+    if (this.status !== "taken_over") {
+      await this.api.stopCall(this.callId, opts);
+    }
     this.disconnect();
   }
 
@@ -118,10 +123,10 @@ export class MonitorSession extends CallSession {
     this.finish(event);
   }
 
-  private async doListen(): Promise<void> {
+  private async doListen(opts?: RequestOptions): Promise<void> {
     let resp;
     try {
-      resp = await this.api.listenLiveCall(this.callId);
+      resp = await this.api.listenLiveCall(this.callId, opts);
     } finally {
       this.reportVersion();
     }
@@ -153,7 +158,7 @@ export class MonitorSession extends CallSession {
     this.setStatus("listening");
   }
 
-  private async doTakeOver(): Promise<void> {
+  private async doTakeOver(opts?: RequestOptions): Promise<void> {
     const joinedForThis = this.status !== "listening";
     if (joinedForThis) await this.listen();
     if (!this.participantId) throw new Error("Not listening");
@@ -186,7 +191,7 @@ export class MonitorSession extends CallSession {
     let tookOver = false;
     try {
       this.takeOverRequested = true;
-      await this.api.takeOverLiveCall(this.callId, this.participantId);
+      await this.api.takeOverLiveCall(this.callId, this.participantId, opts);
       tookOver = true;
       const transport = this.transport;
       if (this.ended || !transport?.takeOver) {

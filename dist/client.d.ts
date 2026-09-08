@@ -1,3 +1,4 @@
+import { RequestOptions } from "./control/api";
 import { MonitorCallOptions, MonitorSession } from "./session/monitor-session";
 import { WebCallOptions, WebCallSession } from "./session/web-call-session";
 import { RetellAuth, UpdateLiveCallRequest } from "./types";
@@ -10,6 +11,6 @@ export declare class RetellClient {
     constructor(config: RetellClientConfig);
     createWebCall(options: WebCallOptions): WebCallSession;
     monitorCall(options: MonitorCallOptions): MonitorSession;
-    stopCall(callId: string): Promise<void>;
-    updateLiveCall(callId: string, body: UpdateLiveCallRequest): Promise<void>;
+    stopCall(callId: string, opts?: RequestOptions): Promise<void>;
+    updateLiveCall(callId: string, body: UpdateLiveCallRequest, opts?: RequestOptions): Promise<void>;
 }

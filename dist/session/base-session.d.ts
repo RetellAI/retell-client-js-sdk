@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import { ControlApi } from "../control/api";
+import { ControlApi, RequestOptions } from "../control/api";
 import { AnalyzerComponent, StartCallConfig, Transport } from "../transport";
 import { CallEndedEvent, LiveCallUtterance, UpdateLiveCallRequest } from "../types";
 import { SessionEventMap, SessionHooks, SessionStatus } from "./events";
@@ -30,7 +30,7 @@ export declare abstract class CallSession extends EventEmitter<SessionEventMap> 
     get preSessionTranscript(): LiveCallUtterance[];
     abstract end(): Promise<void>;
     disconnect(): void;
-    update(body: UpdateLiveCallRequest): Promise<void>;
+    update(body: UpdateLiveCallRequest, opts?: RequestOptions): Promise<void>;
     startAudioPlayback(): Promise<void>;
     protected setStatus(status: SessionStatus): void;
     protected fail(err: unknown): void;

@@ -47,6 +47,13 @@ call.unmute();
 await call.end();
 ```
 
+If the public key has reCAPTCHA enabled, every action takes an optional
+`recaptchaToken` (a fresh v3 token — they are single-use):
+`createWebCall({ agent_id, recaptchaToken, hooks })`, `listen({ recaptchaToken })`,
+`takeOver({ recaptchaToken })`, `update(body, { recaptchaToken })`,
+`end({ recaptchaToken })`. How you obtain the token is up to you; the SDK does
+not load Google's script.
+
 ### Watch an ongoing call
 
 ```ts
@@ -92,3 +99,11 @@ frames, not a continuous PCM stream.
 await client.stopCall(callId);
 await client.updateLiveCall(callId, { fields_to_override: { metadata: {...} } });
 ```
+
+## Migrating from 2.x
+
+`RetellWebClient` still ships and works unchanged (`startCall({ accessToken })`,
+`stopCall()`, the same events), so 2.x code keeps running. It is deprecated
+and will be removed in 4.0: `RetellClient.createWebCall()` replaces the
+create-web-call request plus `startCall`, and `monitorCall()` replaces
+hand-rolled live-listen / take-over flows.

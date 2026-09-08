@@ -14,6 +14,13 @@ export const RETELL_API_HOST = "https://api.retellai.com";
 const MIN_VERSION_HEADER = "X-Retell-Client-JS-SDK-Min-Version";
 const RECOMMENDED_VERSION_HEADER = "X-Retell-Client-JS-SDK-Recommended-Version";
 
+// Per-request extras a caller may need to supply.
+export interface RequestOptions {
+  // A public key with abuse prevention on needs a fresh reCAPTCHA v3 token
+  // on each protected request; single-use, so one per action.
+  recaptchaToken?: string;
+}
+
 export interface ControlApiOptions {
   auth: AnyAuth;
   baseURL?: string;
@@ -60,32 +67,51 @@ export class ControlApi {
 
   public createWebCall(
     body: CreateWebCallRequest,
+    opts?: RequestOptions,
   ): Promise<CreateWebCallResponse> {
-    return this.request("POST", "/v3/create-web-call", body);
+    return this.request("POST", "/v3/create-web-call", body, opts);
   }
 
-  public listenLiveCall(callId: string): Promise<ListenLiveCallResponse> {
-    return this.request("POST", `/v2/listen-live-call/${enc(callId)}`, {});
+  public listenLiveCall(
+    callId: string,
+    opts?: RequestOptions,
+  ): Promise<ListenLiveCallResponse> {
+    return this.request(
+      "POST",
+      `/v2/listen-live-call/${enc(callId)}`,
+      {},
+      opts,
+    );
   }
 
   public async takeOverLiveCall(
     callId: string,
     participantId: string,
+    opts?: RequestOptions,
   ): Promise<void> {
-    await this.request("POST", `/v2/take-over-live-call/${enc(callId)}`, {
-      participant_id: participantId,
-    });
+    await this.request(
+      "POST",
+      `/v2/take-over-live-call/${enc(callId)}`,
+      { participant_id: participantId },
+      opts,
+    );
   }
 
   public async updateLiveCall(
     callId: string,
     body: UpdateLiveCallRequest,
+    opts?: RequestOptions,
   ): Promise<void> {
-    await this.request("PATCH", `/v2/update-live-call/${enc(callId)}`, body);
+    await this.request(
+      "PATCH",
+      `/v2/update-live-call/${enc(callId)}`,
+      body,
+      opts,
+    );
   }
 
-  public async stopCall(callId: string): Promise<void> {
-    await this.request("POST", `/v2/stop-call/${enc(callId)}`);
+  public async stopCall(callId: string, opts?: RequestOptions): Promise<void> {
+    await this.request("POST", `/v2/stop-call/${enc(callId)}`, undefined, opts);
   }
 
   public monitorSocket(callId: string): { url: string; protocols: string[] } {
@@ -99,8 +125,12 @@ export class ControlApi {
     method: string,
     path: string,
     body?: unknown,
+    opts?: RequestOptions,
   ): Promise<T> {
     const headers = authHeaders(this.auth);
+    if (opts?.recaptchaToken) {
+      headers["g-recaptcha-response"] = opts.recaptchaToken;
+    }
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const resp = await this.fetchImpl(this.host + path, {
       method,

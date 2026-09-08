@@ -4,6 +4,7 @@ import { AudioOptions, CallSession } from "./base-session";
 import { SessionHooks } from "./events";
 export interface WebCallOptions extends CreateWebCallRequest {
     hooks?: SessionHooks;
+    recaptchaToken?: string;
     transcript?: boolean;
     audio?: AudioOptions;
 }

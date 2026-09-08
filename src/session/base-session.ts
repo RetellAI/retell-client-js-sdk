@@ -1,5 +1,5 @@
 import { EventEmitter } from "eventemitter3";
-import { ControlApi, versionMessage } from "../control/api";
+import { ControlApi, RequestOptions, versionMessage } from "../control/api";
 import { MonitorSocket } from "../control/monitor-socket";
 import { GatewayTransport } from "../gateway-transport";
 import { LiveKitTransport } from "../livekit-transport";
@@ -93,9 +93,12 @@ export abstract class CallSession extends EventEmitter<SessionEventMap> {
     this.finish({});
   }
 
-  public async update(body: UpdateLiveCallRequest): Promise<void> {
+  public async update(
+    body: UpdateLiveCallRequest,
+    opts?: RequestOptions,
+  ): Promise<void> {
     if (!this.callId) throw new Error("Call not created yet");
-    await this.api.updateLiveCall(this.callId, body);
+    await this.api.updateLiveCall(this.callId, body, opts);
   }
 
   // Browsers may block playback until a user gesture; call from a click.

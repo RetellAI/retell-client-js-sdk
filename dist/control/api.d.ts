@@ -1,6 +1,9 @@
 import { AnyAuth } from "./auth";
 import { CreateWebCallRequest, CreateWebCallResponse, ListenLiveCallResponse, UpdateLiveCallRequest } from "../types";
 export declare const RETELL_API_HOST = "https://api.retellai.com";
+export interface RequestOptions {
+    recaptchaToken?: string;
+}
 export interface ControlApiOptions {
     auth: AnyAuth;
     baseURL?: string;
@@ -25,11 +28,11 @@ export declare class ControlApi {
     private fetchImpl;
     private versionChecked;
     constructor(options: ControlApiOptions);
-    createWebCall(body: CreateWebCallRequest): Promise<CreateWebCallResponse>;
-    listenLiveCall(callId: string): Promise<ListenLiveCallResponse>;
-    takeOverLiveCall(callId: string, participantId: string): Promise<void>;
-    updateLiveCall(callId: string, body: UpdateLiveCallRequest): Promise<void>;
-    stopCall(callId: string): Promise<void>;
+    createWebCall(body: CreateWebCallRequest, opts?: RequestOptions): Promise<CreateWebCallResponse>;
+    listenLiveCall(callId: string, opts?: RequestOptions): Promise<ListenLiveCallResponse>;
+    takeOverLiveCall(callId: string, participantId: string, opts?: RequestOptions): Promise<void>;
+    updateLiveCall(callId: string, body: UpdateLiveCallRequest, opts?: RequestOptions): Promise<void>;
+    stopCall(callId: string, opts?: RequestOptions): Promise<void>;
     monitorSocket(callId: string): {
         url: string;
         protocols: string[];
