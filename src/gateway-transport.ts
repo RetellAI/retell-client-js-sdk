@@ -93,16 +93,24 @@ export class GatewayTransport implements Transport {
       }
       this.sendCandidate(ev.candidate);
     };
+    // Before onConnected a failure surfaces as connect() rejecting; reporting
+    // it as a disconnect as well would end the session before the error
+    // reaches anyone. Same rule as the LiveKit transport.
+    let connected = false;
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       // "disconnected" can be transient; only tear down on terminal states.
-      if (s === "failed" || s === "closed") handlers.onDisconnected();
+      if (connected && (s === "failed" || s === "closed")) {
+        handlers.onDisconnected();
+      }
     };
     // For browsers without connectionState (Firefox < 113). Harmless alongside
     // the above: onDisconnected is idempotent.
     pc.oniceconnectionstatechange = () => {
       const s = pc.iceConnectionState;
-      if (s === "failed" || s === "closed") handlers.onDisconnected();
+      if (connected && (s === "failed" || s === "closed")) {
+        handlers.onDisconnected();
+      }
     };
 
     const offer = await pc.createOffer();
@@ -113,6 +121,7 @@ export class GatewayTransport implements Transport {
 
     // Before the answer: setRemoteDescription fires ontrack synchronously, and
     // call_started must precede call_ready.
+    connected = true;
     handlers.onConnected();
 
     await pc.setRemoteDescription({ type: "answer", sdp: answer.sdp });

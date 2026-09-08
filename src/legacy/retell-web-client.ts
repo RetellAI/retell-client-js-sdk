@@ -44,6 +44,10 @@ export class RetellWebClient extends EventEmitter {
   }
 
   public async startCall(startCallConfig: StartCallConfig): Promise<void> {
+    // One call at a time: starting another ends the one in progress (2.0.8
+    // silently left the old room open with the mic published).
+    if (this.transport) this.stopCall();
+
     let transport: Transport | undefined;
     // A transport we already dropped may still report (LiveKit emits
     // Disconnected from its own disconnect(), after the next call has begun);
@@ -86,9 +90,14 @@ export class RetellWebClient extends EventEmitter {
         },
       });
     } catch (err) {
-      // stopCall() during connect closes the transport, which makes connect
-      // reject: that is the user's cancel, not an error (silent in 2.0.8).
-      if (transport && !current()) return;
+      // stopCall() (or another startCall) during connect closes the transport,
+      // which makes connect reject: that is the user's cancel, not an error
+      // (silent in 2.0.8). Close once more for whatever connect acquired after
+      // the first close — a mic track, a gateway session id.
+      if (transport && !current()) {
+        transport.close();
+        return;
+      }
       this.emit("error", "Error starting call");
       console.error("Error starting call", err);
       this.stopCall();

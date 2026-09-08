@@ -55,13 +55,21 @@ export class LiveKitTransport implements Transport {
     });
     this.room = room;
 
-    room.on(RoomEvent.Disconnected, () => handlers.onDisconnected());
+    // A failed connect() emits Disconnected before it rejects. Until we have
+    // reported onConnected the rejection is the whole story; forwarding the
+    // event too would end the session before the error reaches anyone.
+    let connected = false;
+    room.on(RoomEvent.Disconnected, () => {
+      if (connected) handlers.onDisconnected();
+    });
 
     // A listener is hidden, so after a take-over it can be the only one left
     // holding the room open and the backend's room-delete may never land.
     if (this.config.listener) {
       room.on(RoomEvent.ParticipantDisconnected, () => {
-        if (room.remoteParticipants.size === 0) handlers.onDisconnected();
+        if (connected && room.remoteParticipants.size === 0) {
+          handlers.onDisconnected();
+        }
       });
     }
 
@@ -100,6 +108,7 @@ export class LiveKitTransport implements Transport {
     });
 
     await room.connect(this.config.url || LIVEKIT_HOST, this.config.accessToken);
+    connected = true;
     // A listener publishes nothing until takeOver().
     if (!this.config.listener) {
       room.localParticipant.setMicrophoneEnabled(true);
