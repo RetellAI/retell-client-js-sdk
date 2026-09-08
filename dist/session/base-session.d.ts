@@ -1,0 +1,51 @@
+import { EventEmitter } from "eventemitter3";
+import { ControlApi, RequestOptions } from "../control/api";
+import { AnalyzerComponent, StartCallConfig, Transport } from "../transport";
+import { CallEndedEvent, LiveCallUtterance, UpdateLiveCallRequest } from "../types";
+import { SessionEventMap, SessionHooks, SessionStatus } from "./events";
+export interface AudioOptions {
+    sampleRate?: number;
+    captureDeviceId?: string;
+    playbackDeviceId?: string;
+    emitRawAudioSamples?: boolean;
+}
+export declare abstract class CallSession extends EventEmitter<SessionEventMap> {
+    protected api: ControlApi;
+    status: SessionStatus;
+    callId?: string;
+    isAgentTalking: boolean;
+    analyzerComponent?: AnalyzerComponent;
+    readonly ready: Promise<void>;
+    protected transport?: Transport;
+    protected ended: boolean;
+    protected nodeTransitionSource: "data" | "monitor";
+    private socket?;
+    private store;
+    private captureAudioFrame?;
+    private unknownWarned;
+    private versionReported;
+    private settleReady;
+    constructor(api: ControlApi, hooks?: SessionHooks);
+    get transcript(): LiveCallUtterance[];
+    get preSessionTranscript(): LiveCallUtterance[];
+    abstract end(): Promise<void>;
+    disconnect(): void;
+    update(body: UpdateLiveCallRequest, opts?: RequestOptions): Promise<void>;
+    startAudioPlayback(): Promise<void>;
+    protected setStatus(status: SessionStatus): void;
+    protected fail(err: unknown): void;
+    protected finish(event: CallEndedEvent): void;
+    protected connectTransport(config: StartCallConfig): Promise<void>;
+    protected reportVersion(): void;
+    protected dropTransport(): void;
+    protected startMonitor(callId: string, fatal: boolean): void;
+    private monitorLost;
+    protected closeMonitor(): void;
+    protected onMonitorAttached(): void;
+    protected monitorEnded(event: CallEndedEvent): void;
+    private handleDataEvent;
+    private handleMonitorEvent;
+    private dropUnknown;
+    private captureAudioSamples;
+}
+export declare function toError(err: unknown): Error;

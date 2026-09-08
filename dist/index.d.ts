@@ -1,29 +1,16 @@
-import { EventEmitter } from "eventemitter3";
-export interface StartCallConfig {
-    accessToken: string;
-    sampleRate?: number;
-    captureDeviceId?: string;
-    playbackDeviceId?: string;
-    emitRawAudioSamples?: boolean;
-}
-export declare class RetellWebClient extends EventEmitter {
-    private room;
-    private connected;
-    isAgentTalking: boolean;
-    analyzerComponent: {
-        calculateVolume: () => number;
-        analyser: AnalyserNode;
-        cleanup: () => Promise<void>;
-    };
-    private captureAudioFrame;
-    constructor();
-    startCall(startCallConfig: StartCallConfig): Promise<void>;
-    startAudioPlayback(): Promise<void>;
-    stopCall(): void;
-    mute(): void;
-    unmute(): void;
-    private captureAudioSamples;
-    private handleRoomEvents;
-    private handleAudioEvents;
-    private handleDataEvents;
-}
+export { RetellClient } from "./client";
+export type { RetellClientConfig } from "./client";
+export { CallSession } from "./session/base-session";
+export type { AudioOptions } from "./session/base-session";
+export { WebCallSession } from "./session/web-call-session";
+export type { WebCallOptions } from "./session/web-call-session";
+export { MonitorSession } from "./session/monitor-session";
+export type { MonitorCallOptions } from "./session/monitor-session";
+export type { SessionEvent, SessionEventMap, SessionHooks, SessionStatus, } from "./session/events";
+export { RetellApiError } from "./control/api";
+export type { RequestOptions } from "./control/api";
+export type { AnalyzerComponent, TransportKind } from "./transport";
+export * from "./types";
+export { RetellWebClient } from "./legacy/retell-web-client";
+export type { RetellClientOptions } from "./legacy/retell-web-client";
+export type { StartCallConfig } from "./transport";
