@@ -1,6 +1,6 @@
 {
   "name": "retell-client-js-sdk",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Browser SDK for Retell voice calls: start a web call with an agent, or monitor an ongoing call.",
   "main": "dist/index.js",
   "module": "dist/index.m.js",
