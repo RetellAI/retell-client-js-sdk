@@ -42,10 +42,7 @@ export class WebCallSession extends CallSession {
     try {
       let resp;
       try {
-        resp = await this.api.createWebCall(
-          { ...request, ...extra },
-          { recaptchaToken },
-        );
+        resp = await this.api.createWebCall(request, { recaptchaToken, extra });
       } finally {
         this.reportVersion();
       }

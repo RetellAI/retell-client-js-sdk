@@ -77,7 +77,9 @@ export class MonitorSocket {
       if (this.closed || ws !== this.ws) return;
       this.ws = undefined;
       if (this.ended) return; // reported via the call_ended message
-      if (ev.code === WS_CLOSE_NORMAL && ev.reason === "call_ended") {
+      // A normal close from the server is the end of the stream, whatever
+      // reason text it carries; only abnormal closes are worth a retry.
+      if (ev.code === WS_CLOSE_NORMAL) {
         this.ended = true;
         this.handlers.onEnd();
         return;

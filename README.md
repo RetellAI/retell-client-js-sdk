@@ -52,7 +52,8 @@ If the public key has reCAPTCHA enabled, every action takes an optional
 `createWebCall({ agent_id, recaptchaToken, hooks })`, `listen({ recaptchaToken })`,
 `takeOver({ recaptchaToken })`, `update(body, { recaptchaToken })`,
 `end({ recaptchaToken })`. How you obtain the token is up to you; the SDK does
-not load Google's script.
+not load Google's script. The same options object takes `extra`, request
+fields this SDK version doesn't list yet, merged into the body as-is.
 
 ### Watch an ongoing call
 

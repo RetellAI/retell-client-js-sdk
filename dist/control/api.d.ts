@@ -3,6 +3,7 @@ import { CreateWebCallRequest, CreateWebCallResponse, ListenLiveCallResponse, Up
 export declare const RETELL_API_HOST = "https://api.retellai.com";
 export interface RequestOptions {
     recaptchaToken?: string;
+    extra?: Record<string, unknown>;
 }
 export interface ControlApiOptions {
     auth: AnyAuth;

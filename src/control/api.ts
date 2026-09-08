@@ -19,6 +19,8 @@ export interface RequestOptions {
   // A public key with abuse prevention on needs a fresh reCAPTCHA v3 token
   // on each protected request; single-use, so one per action.
   recaptchaToken?: string;
+  // Request fields this SDK version doesn't list yet; merged into the body.
+  extra?: Record<string, unknown>;
 }
 
 export interface ControlApiOptions {
@@ -111,7 +113,12 @@ export class ControlApi {
   }
 
   public async stopCall(callId: string, opts?: RequestOptions): Promise<void> {
-    await this.request("POST", `/v2/stop-call/${enc(callId)}`, undefined, opts);
+    await this.request(
+      "POST",
+      `/v2/stop-call/${enc(callId)}`,
+      opts?.extra ? {} : undefined,
+      opts,
+    );
   }
 
   public monitorSocket(callId: string): { url: string; protocols: string[] } {
@@ -130,6 +137,9 @@ export class ControlApi {
     const headers = authHeaders(this.auth);
     if (opts?.recaptchaToken) {
       headers["g-recaptcha-response"] = opts.recaptchaToken;
+    }
+    if (opts?.extra && body && typeof body === "object") {
+      body = { ...(body as object), ...opts.extra };
     }
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const resp = await this.fetchImpl(this.host + path, {
