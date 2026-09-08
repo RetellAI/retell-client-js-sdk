@@ -30,16 +30,19 @@ export interface ListenLiveCallResponse {
     gateway_ip?: string;
     expires_at: number;
 }
-export type DataStorageSetting = "everything" | "everything_except_pii" | "basic_attributes_only";
+export type KnownDataStorageSetting = "everything" | "everything_except_pii" | "basic_attributes_only";
+export type DataStorageSetting = KnownDataStorageSetting | (string & {});
 export interface UpdateLiveCallRequest {
     fields_to_override?: {
         override_dynamic_variables?: Record<string, string> | null;
         metadata?: Record<string, unknown>;
         data_storage_setting?: DataStorageSetting;
+        [field: string]: unknown;
     };
     call_control?: {
         trigger_response?: boolean;
         additional_context?: string;
+        [field: string]: unknown;
     };
 }
 export interface Utterance {
@@ -95,7 +98,8 @@ export type LiveCallUtterance = (Utterance | ToolCallInvocationUtterance | ToolC
     id: string;
     time_sec: number;
 };
-export type DisconnectionReason = "user_hangup" | "agent_hangup" | "call_transfer" | "voicemail_reached" | "ivr_reached" | "inactivity" | "max_duration_reached" | "concurrency_limit_reached" | "no_valid_payment" | "scam_detected" | "dial_busy" | "dial_failed" | "dial_no_answer" | "invalid_destination" | "telephony_provider_permission_denied" | "telephony_provider_unavailable" | "sip_routing_error" | "marked_as_spam" | "user_declined" | "error_llm_websocket_open" | "error_llm_websocket_lost_connection" | "error_llm_websocket_runtime" | "error_llm_websocket_corrupt_payload" | "error_no_audio_received" | "error_asr" | "error_retell" | "error_unknown" | "error_user_not_joined" | "registered_call_timeout" | "transfer_bridged" | "transfer_cancelled" | "manual_stopped" | "call_take_over";
+export type KnownDisconnectionReason = "user_hangup" | "agent_hangup" | "call_transfer" | "voicemail_reached" | "ivr_reached" | "inactivity" | "max_duration_reached" | "concurrency_limit_reached" | "no_valid_payment" | "scam_detected" | "dial_busy" | "dial_failed" | "dial_no_answer" | "invalid_destination" | "telephony_provider_permission_denied" | "telephony_provider_unavailable" | "sip_routing_error" | "marked_as_spam" | "user_declined" | "error_llm_websocket_open" | "error_llm_websocket_lost_connection" | "error_llm_websocket_runtime" | "error_llm_websocket_corrupt_payload" | "error_no_audio_received" | "error_asr" | "error_retell" | "error_unknown" | "error_user_not_joined" | "registered_call_timeout" | "transfer_bridged" | "transfer_cancelled" | "manual_stopped" | "call_take_over";
+export type DisconnectionReason = KnownDisconnectionReason | (string & {});
 export type LiveCallNodeTransition = NodeTransitionUtterance & {
     id: string;
     time_sec: number;
@@ -107,7 +111,7 @@ export interface CallEndedEvent {
 export interface UpdateEvent {
     event_type: "update";
     transcript: Utterance[];
-    turntaking?: "agent_turn" | "user_turn";
+    turntaking?: "agent_turn" | "user_turn" | (string & {});
     [field: string]: unknown;
 }
 export interface MetadataEvent {

@@ -1,5 +1,9 @@
 // Wire types shared by the control path (REST + monitor WS). Field names are
 // the API's own, so a request body can be copied from the docs unchanged.
+//
+// Enums the backend sends are open (`Known… | string`): a value this SDK
+// version doesn't list still type-checks, so the backend can add one without
+// an SDK release. Enums the SDK owns (session status, transport) stay closed.
 
 import { TransportKind } from "./transport";
 
@@ -48,20 +52,24 @@ export interface ListenLiveCallResponse {
 
 // --- /v2/update-live-call ---
 
-export type DataStorageSetting =
+export type KnownDataStorageSetting =
   | "everything"
   | "everything_except_pii"
   | "basic_attributes_only";
+export type DataStorageSetting = KnownDataStorageSetting | (string & {});
 
+// The nested objects accept fields this SDK version doesn't list.
 export interface UpdateLiveCallRequest {
   fields_to_override?: {
     override_dynamic_variables?: Record<string, string> | null;
     metadata?: Record<string, unknown>;
     data_storage_setting?: DataStorageSetting;
+    [field: string]: unknown;
   };
   call_control?: {
     trigger_response?: boolean;
     additional_context?: string;
+    [field: string]: unknown;
   };
 }
 
@@ -131,7 +139,7 @@ export type LiveCallUtterance = (
   | InjectedUtterance
 ) & { id: string; time_sec: number };
 
-export type DisconnectionReason =
+export type KnownDisconnectionReason =
   | "user_hangup"
   | "agent_hangup"
   | "call_transfer"
@@ -165,6 +173,7 @@ export type DisconnectionReason =
   | "transfer_cancelled"
   | "manual_stopped"
   | "call_take_over";
+export type DisconnectionReason = KnownDisconnectionReason | (string & {});
 
 export type LiveCallNodeTransition = NodeTransitionUtterance & {
   id: string;
@@ -181,7 +190,7 @@ export interface CallEndedEvent {
 export interface UpdateEvent {
   event_type: "update";
   transcript: Utterance[];
-  turntaking?: "agent_turn" | "user_turn";
+  turntaking?: "agent_turn" | "user_turn" | (string & {});
   [field: string]: unknown;
 }
 

@@ -5,6 +5,7 @@ import { SessionHooks } from "./events";
 export interface WebCallOptions extends CreateWebCallRequest {
     hooks?: SessionHooks;
     recaptchaToken?: string;
+    extra?: Record<string, unknown>;
     transcript?: boolean;
     audio?: AudioOptions;
 }
