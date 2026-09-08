@@ -1,6 +1,7 @@
 import { AnyAuth } from "./auth";
 import { CreateWebCallRequest, CreateWebCallResponse, ListenLiveCallResponse, UpdateLiveCallRequest } from "../types";
 export declare const RETELL_API_HOST = "https://api.retellai.com";
+export declare const SDK_VERSION_HEADER = "X-Retell-Client-JS-SDK-Version";
 export interface RequestOptions {
     recaptchaToken?: string;
     extra?: Record<string, unknown>;

@@ -11,6 +11,8 @@ import { SDK_VERSION } from "../version";
 // the token minted here is spent there.
 export const RETELL_API_HOST = "https://api.retellai.com";
 
+// Sent on every request so the backend can attribute traffic to a version.
+export const SDK_VERSION_HEADER = "X-Retell-Client-JS-SDK-Version";
 const MIN_VERSION_HEADER = "X-Retell-Client-JS-SDK-Min-Version";
 const RECOMMENDED_VERSION_HEADER = "X-Retell-Client-JS-SDK-Recommended-Version";
 
@@ -135,6 +137,7 @@ export class ControlApi {
     opts?: RequestOptions,
   ): Promise<T> {
     const headers = authHeaders(this.auth);
+    headers[SDK_VERSION_HEADER] = SDK_VERSION;
     if (opts?.recaptchaToken) {
       headers["g-recaptcha-response"] = opts.recaptchaToken;
     }
