@@ -44,20 +44,29 @@ export class RetellWebClient extends EventEmitter {
   }
 
   public async startCall(startCallConfig: StartCallConfig): Promise<void> {
+    let transport: Transport | undefined;
+    // A transport we already dropped may still report (LiveKit emits
+    // Disconnected from its own disconnect(), after the next call has begun);
+    // only the current one counts. 2.0.8 got the same protection from the
+    // `connected` flag, which stopCall() no longer waits for.
+    const current = () => this.transport === transport;
+
     try {
       const kind = selectTransport(startCallConfig, this.defaultTransport);
-      this.transport =
+      transport =
         kind === "gateway"
           ? new GatewayTransport(startCallConfig)
           : new LiveKitTransport(startCallConfig);
+      this.transport = transport;
 
-      await this.transport.connect({
+      await transport.connect({
         onConnected: () => {
-          if (this.connected) return;
+          if (!current() || this.connected) return;
           this.connected = true;
           this.emit("call_started");
         },
         onCallReady: (analyzer) => {
+          if (!current()) return;
           this.emit("call_ready");
           if (analyzer) {
             this.analyzerComponent = analyzer;
@@ -66,11 +75,20 @@ export class RetellWebClient extends EventEmitter {
             );
           }
         },
-        onData: (event) => this.handleServerEvent(event),
-        onDisconnected: () => this.stopCall(),
-        onError: (message) => this.emit("error", message),
+        onData: (event) => {
+          if (current()) this.handleServerEvent(event);
+        },
+        onDisconnected: () => {
+          if (current()) this.stopCall();
+        },
+        onError: (message) => {
+          if (current()) this.emit("error", message);
+        },
       });
     } catch (err) {
+      // stopCall() during connect closes the transport, which makes connect
+      // reject: that is the user's cancel, not an error (silent in 2.0.8).
+      if (transport && !current()) return;
       this.emit("error", "Error starting call");
       console.error("Error starting call", err);
       this.stopCall();

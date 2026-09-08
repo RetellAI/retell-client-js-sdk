@@ -27,11 +27,11 @@ export class MonitorSocket {
   private ws?: WebSocket;
   private closed = false;
   private ended = false;
+  // Both count consecutive failures and reset once the server has admitted
+  // us (first frame), not on open: a server that accepts and drops us every
+  // time must back off like any other failure, and not be retried forever.
   private attempts = 0;
   private notLiveAttempts = 0;
-  // Opens that never delivered a frame: a server that accepts and drops us
-  // every time must not be retried forever.
-  private emptyOpens = 0;
   private timer?: ReturnType<typeof setTimeout>;
 
   constructor(
@@ -50,14 +50,6 @@ export class MonitorSocket {
     }
     this.ws = ws;
 
-    ws.onopen = () => {
-      if (ws !== this.ws) return;
-      this.attempts = 0;
-      if (++this.emptyOpens > MAX_ATTEMPTS) {
-        this.fail("Lost connection to the call monitor");
-      }
-    };
-
     ws.onmessage = (ev) => {
       if (this.closed || ws !== this.ws) return;
       let msg: unknown;
@@ -66,9 +58,9 @@ export class MonitorSocket {
       } catch {
         return;
       }
-      // Admitted — earlier not-live retries don't count against a later one.
+      // Admitted — earlier retries don't count against a later drop.
+      this.attempts = 0;
       this.notLiveAttempts = 0;
-      this.emptyOpens = 0;
       if ((msg as { type?: string })?.type === "call_ended") this.ended = true;
       this.handlers.onMessage(msg);
     };

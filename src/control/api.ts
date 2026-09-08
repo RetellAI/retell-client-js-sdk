@@ -64,7 +64,7 @@ export class ControlApi {
   constructor(options: ControlApiOptions) {
     this.auth = options.auth;
     this.host = (options.baseURL || RETELL_API_HOST).replace(/\/+$/, "");
-    this.fetchImpl = options.fetch || fetch.bind(globalThis);
+    this.fetchImpl = options.fetch || fetch;
   }
 
   public createWebCall(
@@ -142,7 +142,10 @@ export class ControlApi {
       body = { ...(body as object), ...opts.extra };
     }
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    const resp = await this.fetchImpl(this.host + path, {
+    // Called detached: a native fetch (ours or a caller's `window.fetch`)
+    // throws "Illegal invocation" when `this` is anything but the global.
+    const fetchImpl = this.fetchImpl;
+    const resp = await fetchImpl(this.host + path, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

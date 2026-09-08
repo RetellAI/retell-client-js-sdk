@@ -39,6 +39,7 @@ export declare abstract class CallSession extends EventEmitter<SessionEventMap> 
     protected reportVersion(): void;
     protected dropTransport(): void;
     protected startMonitor(callId: string, fatal: boolean): void;
+    private monitorLost;
     protected closeMonitor(): void;
     protected onMonitorAttached(): void;
     protected monitorEnded(event: CallEndedEvent): void;

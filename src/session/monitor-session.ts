@@ -57,9 +57,11 @@ export class MonitorSession extends CallSession {
   }
 
   // Drop the audio and go back to transcript only. Not after a take-over:
-  // by then our audio is the call.
+  // by then our audio is the call. Nor during one: the take-over request is
+  // about to go out for this participant, and would strand the caller if the
+  // audio it needs were gone by the time it succeeds.
   public stopListening(): void {
-    if (this.status !== "listening") return;
+    if (this.status !== "listening" || this.takingOver) return;
     this.dropTransport();
     this.participantId = undefined;
     this.setStatus("monitoring");
@@ -161,7 +163,8 @@ export class MonitorSession extends CallSession {
   private async doTakeOver(opts?: RequestOptions): Promise<void> {
     const joinedForThis = this.status !== "listening";
     if (joinedForThis) await this.listen();
-    if (!this.participantId) throw new Error("Not listening");
+    const participantId = this.participantId;
+    if (!participantId) throw new Error("Not listening");
 
     // Prompt for the mic before the irreversible step, so a denial fails
     // while the AI is untouched. Held open until the transport has its own
@@ -191,7 +194,7 @@ export class MonitorSession extends CallSession {
     let tookOver = false;
     try {
       this.takeOverRequested = true;
-      await this.api.takeOverLiveCall(this.callId, this.participantId, opts);
+      await this.api.takeOverLiveCall(this.callId, participantId, opts);
       tookOver = true;
       const transport = this.transport;
       if (this.ended || !transport?.takeOver) {

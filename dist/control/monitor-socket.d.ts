@@ -12,7 +12,6 @@ export declare class MonitorSocket {
     private ended;
     private attempts;
     private notLiveAttempts;
-    private emptyOpens;
     private timer?;
     constructor(url: string, protocols: string[], handlers: MonitorSocketHandlers);
     open(): void;

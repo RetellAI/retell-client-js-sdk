@@ -37,23 +37,29 @@ const call = client.createWebCall({
     onStatus: (status) => ...,     // connecting → live → ended
     onAgentStartTalking: () => ...,
     onAgentStopTalking: () => ...,
-    onEnd: ({ disconnection_reason }) => ...,
+    onEnd: () => ...,
     onError: (err) => ...,
   },
 });
 
 call.mute();
 call.unmute();
-await call.end();
+await call.end();                // leaving is what ends a web call
 ```
 
-If the public key has reCAPTCHA enabled, every action takes an optional
+`transcript: true` also streams the transcript (`onTranscript`, and `onEnd`
+then carries the `disconnection_reason`); it needs a key with `Call.Write`,
+which a public key scoped to web calls alone won't have, so it is off by
+default. If the stream is refused or dropped the call itself goes on.
+
+If the public key has reCAPTCHA enabled, every request takes an optional
 `recaptchaToken` (a fresh v3 token — they are single-use):
 `createWebCall({ agent_id, recaptchaToken, hooks })`, `listen({ recaptchaToken })`,
-`takeOver({ recaptchaToken })`, `update(body, { recaptchaToken })`,
-`end({ recaptchaToken })`. How you obtain the token is up to you; the SDK does
-not load Google's script. The same options object takes `extra`, request
-fields this SDK version doesn't list yet, merged into the body as-is.
+`takeOver({ recaptchaToken })`, `update(body, { recaptchaToken })`, and on a
+monitored call `end({ recaptchaToken })` (a web call's `end()` makes no
+request). How you obtain the token is up to you; the SDK does not load
+Google's script. The same options object takes `extra`, request fields this
+SDK version doesn't list yet, merged into the body as-is.
 
 ### Watch an ongoing call
 

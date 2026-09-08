@@ -193,18 +193,33 @@ export abstract class CallSession extends EventEmitter<SessionEventMap> {
     }
   }
 
-  // `fatal` when the transcript is the session's purpose, not an extra.
+  // `fatal` when the transcript is the session's purpose, not an extra: then
+  // losing the stream ends the session. Otherwise the call goes on without it
+  // and the transport reports the real end.
   protected startMonitor(callId: string, fatal: boolean): void {
     const { url, protocols } = this.api.monitorSocket(callId);
     this.socket = new MonitorSocket(url, protocols, {
       onMessage: (msg) => this.handleMonitorEvent(msg),
-      onEnd: () => this.monitorEnded({}),
+      // Closed by the server without a call_ended frame.
+      onEnd: () => {
+        if (fatal) this.monitorEnded({});
+        else this.monitorLost("stream closed");
+      },
       onError: (err) => {
         if (fatal) this.fail(err);
-        else console.warn("retell: live transcript unavailable:", err.message);
+        else this.monitorLost(err.message);
       },
     });
     this.socket.open();
+  }
+
+  // The optional transcript is gone (rejected, or dropped mid-call) while the
+  // call itself continues. Node transitions were routed to the stream because
+  // its items carry the node ids; from here the data channel is all there is.
+  private monitorLost(why: string): void {
+    this.closeMonitor();
+    this.nodeTransitionSource = "data";
+    console.warn("retell: live transcript unavailable:", why);
   }
 
   protected closeMonitor(): void {

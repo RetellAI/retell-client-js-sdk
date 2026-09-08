@@ -39,6 +39,7 @@ export class WebCallSession extends CallSession {
   private async start(options: WebCallOptions): Promise<void> {
     const { hooks, transcript, audio, recaptchaToken, extra, ...request } =
       options;
+    if (this.ended) return; // ended before the microtask ran
     try {
       let resp;
       try {
@@ -46,8 +47,14 @@ export class WebCallSession extends CallSession {
       } finally {
         this.reportVersion();
       }
-      if (this.ended) return;
       this.callId = resp.call_id;
+      if (this.ended) {
+        // Cancelled while the request was in flight: the backend is holding
+        // a call nobody will join. Best effort — its not-joined timeout is
+        // the fallback.
+        this.api.stopCall(resp.call_id).catch(() => {});
+        return;
+      }
       await this.connectTransport({
         accessToken: resp.access_token,
         transport: resp.transport,
