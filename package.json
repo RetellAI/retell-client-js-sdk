@@ -11,6 +11,7 @@
     "src"
   ],
   "scripts": {
+    "test": "tsx --test test/*.test.ts",
     "build": "rm -rf dist && node scripts/write-version.js && microbundle --tsconfig tsconfig.json --no-sourcemap",
     "prepublishOnly": "npm run build"
   },
@@ -28,7 +29,8 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "microbundle": "^0.15.1"
+    "microbundle": "^0.15.1",
+    "tsx": "^4.23.15"
   },
   "dependencies": {
     "eventemitter3": "^5.0.1",

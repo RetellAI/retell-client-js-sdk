@@ -161,44 +161,55 @@ export class GatewayTransport implements Transport {
   // The backend must have promoted the session first, or the gateway drops the
   // uplink regardless.
   public async takeOver(): Promise<void> {
-    if (!this.pc) throw new Error("gateway transport not connected");
+    const pc = this.pc;
+    if (!pc) throw new Error("gateway transport not connected");
     if (this.localStream) return; // already publishing (took over already)
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: this.micConstraints(),
     });
-    const track = this.localStream.getAudioTracks()[0];
+    const track = stream.getAudioTracks()[0];
 
     // Reuse the existing transceiver to keep a single audio m-line.
-    const audioTx = this.pc
+    const audioTx = pc
       .getTransceivers()
       .find((t) => t.direction === "recvonly");
-    if (audioTx) {
-      await audioTx.sender.replaceTrack(track);
-      audioTx.direction = "sendrecv";
-    } else {
-      this.pc.addTrack(track, this.localStream);
-    }
+    try {
+      if (audioTx) {
+        await audioTx.sender.replaceTrack(track);
+        audioTx.direction = "sendrecv";
+      } else {
+        pc.addTrack(track, stream);
+      }
 
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    const resp = await fetch(
-      `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
-      {
-        method: "PATCH",
-        headers: this.headers({ "Content-Type": "application/sdp" }),
-        body: this.pc.localDescription!.sdp,
-      },
-    );
-    if (!resp.ok) {
-      throw new Error(
-        `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const resp = await fetch(
+        `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
+        {
+          method: "PATCH",
+          headers: this.headers({ "Content-Type": "application/sdp" }),
+          body: pc.localDescription!.sdp,
+        },
       );
+      if (!resp.ok) {
+        throw new Error(
+          `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+        );
+      }
+      await pc.setRemoteDescription({
+        type: "answer",
+        sdp: await resp.text(),
+      });
+      // close() ran meanwhile and could not see this stream.
+      if (this.pc !== pc) throw new Error("gateway transport closed");
+    } catch (err) {
+      // Not publishing: release the mic so a retry starts clean instead of
+      // returning early above with nothing sent.
+      stream.getTracks().forEach((t) => t.stop());
+      throw err;
     }
-    await this.pc.setRemoteDescription({
-      type: "answer",
-      sdp: await resp.text(),
-    });
+    this.localStream = stream;
   }
 
   private micConstraints(): MediaTrackConstraints {
