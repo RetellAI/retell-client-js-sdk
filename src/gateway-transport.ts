@@ -218,7 +218,6 @@ export class GatewayTransport implements Transport {
         retryable = retryable || err instanceof TypeError;
         throw err;
       }
-      retryable = false;
       await pc.setRemoteDescription({
         type: "answer",
         sdp: answer,
