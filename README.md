@@ -202,3 +202,41 @@ One behavioural difference to plan for: 2.x calls emitted
 `createWebCall()` creates do not. A page that drove a talking indicator or read
 `update.transcript` wants `transcript: true` and the transcript events
 instead.
+
+## Development and releases
+
+Use Node.js 24, run `npm ci`, then `npm run check`. The checks typecheck the
+source, build all bundles, install the packed tarball in a temporary project,
+and verify its CommonJS, ES module, UMD, and TypeScript entry points.
+CI runs these checks on PRs and pushes to `main`.
+
+[Release Please](https://github.com/googleapis/release-please) maintains a release
+PR with a version bump and changelog. Use Conventional Commit titles for squash
+merges, or Conventional Commit messages for commits that enter `main`:
+`fix:` releases a patch, `feat:` releases a minor, and `feat!:` or a
+`BREAKING CHANGE:` footer releases a major. Review and merge the release PR
+when ready to publish. The Release workflow creates a `vX.Y.Z` tag and GitHub
+release, checks out that release commit, runs `npm run check`, and publishes
+to npm. The publish hook rebuilds `dist` and generates `src/version.ts` from
+the released package version.
+
+The workflow uses `GITHUB_TOKEN` and explicitly dispatches CI for release PRs.
+Under Settings → Actions → General, allow GitHub Actions to create pull requests.
+Make the CI `Validate package` check required in the branch rules for `main`.
+
+Before merging the first release PR, configure
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) in the npm
+settings for `retell-client-js-sdk`. Choose GitHub Actions with organization
+`RetellAI`, repository `retell-client-js-sdk`, and workflow filename `release.yml`.
+Leave the environment name empty and allow publishing. The workflow uses
+Node.js 24 and npm 11 with OIDC; it needs no npm token.
+
+The release manifest starts at the published 3.0.1 commit. Merge the automation
+change with a `fix:` title to start the first patch release PR for 3.0.2.
+The earlier takeover commits have no Conventional Commit prefix, so add their
+fix to the first release PR's changelog before merging it. Later releases use
+the previous release as their starting point.
+
+If npm publication fails after the GitHub release is created, correct the
+configuration and use **Re-run failed jobs** on that Release run. This reruns
+the publish job with the original release commit and version.
