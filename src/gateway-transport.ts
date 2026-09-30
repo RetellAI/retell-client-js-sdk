@@ -31,6 +31,7 @@ export class GatewayTransport implements Transport {
   private pc?: RTCPeerConnection;
   private dc?: RTCDataChannel;
   private localStream?: MediaStream;
+  private takingOver?: Promise<void>;
   private audioEl?: HTMLAudioElement;
   private analyzer?: AnalyzerComponent;
   private sessionId?: string;
@@ -162,43 +163,99 @@ export class GatewayTransport implements Transport {
   // uplink regardless.
   public async takeOver(): Promise<void> {
     if (!this.pc) throw new Error("gateway transport not connected");
-    if (this.localStream) return; // already publishing (took over already)
+    if (this.localStream) return;
+    if (!this.takingOver) {
+      this.takingOver = this.doTakeOver(this.pc).finally(() => {
+        this.takingOver = undefined;
+      });
+    }
+    return this.takingOver;
+  }
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
+  private async doTakeOver(
+    pc: RTCPeerConnection,
+    canRetry = true,
+  ): Promise<void> {
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: this.micConstraints(),
     });
-    const track = this.localStream.getAudioTracks()[0];
+    const track = stream.getAudioTracks()[0];
 
     // Reuse the existing transceiver to keep a single audio m-line.
-    const audioTx = this.pc
+    const audioTx = pc
       .getTransceivers()
       .find((t) => t.direction === "recvonly");
-    if (audioTx) {
-      await audioTx.sender.replaceTrack(track);
-      audioTx.direction = "sendrecv";
-    } else {
-      this.pc.addTrack(track, this.localStream);
-    }
+    let addedSender: RTCRtpSender | undefined;
+    let retryable = false;
+    try {
+      if (audioTx) {
+        await audioTx.sender.replaceTrack(track);
+        audioTx.direction = "sendrecv";
+      } else {
+        addedSender = pc.addTrack(track, stream);
+      }
 
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    const resp = await fetch(
-      `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
-      {
-        method: "PATCH",
-        headers: this.headers({ "Content-Type": "application/sdp" }),
-        body: this.pc.localDescription!.sdp,
-      },
-    );
-    if (!resp.ok) {
-      throw new Error(
-        `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
-      );
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      let answer: string;
+      try {
+        const resp = await fetch(
+          `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
+          {
+            method: "PATCH",
+            headers: this.headers({ "Content-Type": "application/sdp" }),
+            body: pc.localDescription!.sdp,
+          },
+        );
+        retryable = resp.status >= 500 && resp.status < 600;
+        answer = await resp.text();
+        if (!resp.ok) {
+          throw new Error(
+            `gateway take-over renegotiation failed: ${resp.status} ${answer}`,
+          );
+        }
+      } catch (err) {
+        retryable = retryable || err instanceof TypeError;
+        throw err;
+      }
+      await pc.setRemoteDescription({
+        type: "answer",
+        sdp: answer,
+      });
+      if (this.pc !== pc) throw new Error("gateway transport closed");
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop());
+      const rolledBack = await this.undoTakeOver(pc, audioTx, addedSender);
+      if (canRetry && retryable && rolledBack && this.pc === pc) {
+        return this.doTakeOver(pc, false);
+      }
+      throw err;
     }
-    await this.pc.setRemoteDescription({
-      type: "answer",
-      sdp: await resp.text(),
-    });
+    // Set localStream last because takeOver() treats localStream as a published microphone.
+    this.localStream = stream;
+  }
+
+  private async undoTakeOver(
+    pc: RTCPeerConnection,
+    audioTx: RTCRtpTransceiver | undefined,
+    addedSender: RTCRtpSender | undefined,
+  ): Promise<boolean> {
+    if (pc.signalingState === "closed") return false;
+    try {
+      if (pc.signalingState === "have-local-offer") {
+        await pc.setLocalDescription({ type: "rollback" });
+      }
+      if (audioTx) {
+        audioTx.direction = "recvonly";
+        await audioTx.sender.replaceTrack(null);
+      } else if (addedSender) {
+        pc.removeTrack(addedSender);
+      }
+      return true;
+    } catch (err) {
+      console.error("gateway take-over rollback failed", err);
+      return false;
+    }
   }
 
   private micConstraints(): MediaTrackConstraints {
