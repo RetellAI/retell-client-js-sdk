@@ -31,6 +31,7 @@ export class GatewayTransport implements Transport {
   private pc?: RTCPeerConnection;
   private dc?: RTCDataChannel;
   private localStream?: MediaStream;
+  private takingOver?: Promise<void>;
   private audioEl?: HTMLAudioElement;
   private analyzer?: AnalyzerComponent;
   private sessionId?: string;
@@ -163,42 +164,83 @@ export class GatewayTransport implements Transport {
   public async takeOver(): Promise<void> {
     if (!this.pc) throw new Error("gateway transport not connected");
     if (this.localStream) return; // already publishing (took over already)
+    if (!this.takingOver) {
+      this.takingOver = this.doTakeOver(this.pc).finally(() => {
+        this.takingOver = undefined;
+      });
+    }
+    return this.takingOver;
+  }
 
-    this.localStream = await navigator.mediaDevices.getUserMedia({
+  private async doTakeOver(pc: RTCPeerConnection): Promise<void> {
+    const stream = await navigator.mediaDevices.getUserMedia({
       audio: this.micConstraints(),
     });
-    const track = this.localStream.getAudioTracks()[0];
+    const track = stream.getAudioTracks()[0];
 
     // Reuse the existing transceiver to keep a single audio m-line.
-    const audioTx = this.pc
+    const audioTx = pc
       .getTransceivers()
       .find((t) => t.direction === "recvonly");
-    if (audioTx) {
-      await audioTx.sender.replaceTrack(track);
-      audioTx.direction = "sendrecv";
-    } else {
-      this.pc.addTrack(track, this.localStream);
-    }
+    let addedSender: RTCRtpSender | undefined;
+    try {
+      if (audioTx) {
+        await audioTx.sender.replaceTrack(track);
+        audioTx.direction = "sendrecv";
+      } else {
+        addedSender = pc.addTrack(track, stream);
+      }
 
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
-    const resp = await fetch(
-      `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
-      {
-        method: "PATCH",
-        headers: this.headers({ "Content-Type": "application/sdp" }),
-        body: this.pc.localDescription!.sdp,
-      },
-    );
-    if (!resp.ok) {
-      throw new Error(
-        `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const resp = await fetch(
+        `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
+        {
+          method: "PATCH",
+          headers: this.headers({ "Content-Type": "application/sdp" }),
+          body: pc.localDescription!.sdp,
+        },
       );
+      if (!resp.ok) {
+        throw new Error(
+          `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+        );
+      }
+      await pc.setRemoteDescription({
+        type: "answer",
+        sdp: await resp.text(),
+      });
+      if (this.pc !== pc) throw new Error("gateway transport closed");
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop());
+      await this.undoTakeOver(pc, audioTx, addedSender);
+      throw err;
     }
-    await this.pc.setRemoteDescription({
-      type: "answer",
-      sdp: await resp.text(),
-    });
+    // takeOver() reads a set localStream as "published", so set it last.
+    this.localStream = stream;
+  }
+
+  // Put the connection back the way the listener join left it, so that a
+  // retry renegotiates the same m-line.
+  private async undoTakeOver(
+    pc: RTCPeerConnection,
+    audioTx: RTCRtpTransceiver | undefined,
+    addedSender: RTCRtpSender | undefined,
+  ): Promise<void> {
+    if (pc.signalingState === "closed") return;
+    try {
+      if (pc.signalingState === "have-local-offer") {
+        await pc.setLocalDescription({ type: "rollback" });
+      }
+      if (audioTx) {
+        audioTx.direction = "recvonly";
+        await audioTx.sender.replaceTrack(null);
+      } else if (addedSender) {
+        pc.removeTrack(addedSender);
+      }
+    } catch (err) {
+      console.error("gateway take-over rollback failed", err);
+    }
   }
 
   private micConstraints(): MediaTrackConstraints {
