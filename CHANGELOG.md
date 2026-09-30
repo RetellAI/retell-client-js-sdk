@@ -5,5 +5,5 @@
 
 ### Bug Fixes
 
-* automate SDK releases ([e8e61a8](https://github.com/RetellAI/retell-client-js-sdk/commit/e8e61a827b9c7f372f9c91b9b5e1843fd82e8fb3))
-* automate SDK releases ([52535b2](https://github.com/RetellAI/retell-client-js-sdk/commit/52535b20bd4840cdd732c86ae4df2df35700543e))
+* Recover from failed gateway takeovers and retry transient negotiation failures once. ([#29](https://github.com/RetellAI/retell-client-js-sdk/pull/29))
+* Automate SDK releases and validate package entry points in CI. ([#30](https://github.com/RetellAI/retell-client-js-sdk/pull/30))
