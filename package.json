@@ -11,6 +11,9 @@
     "src"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit --incremental false",
+    "check:package": "node scripts/check-package.js",
+    "check": "npm run typecheck && npm run build && npm run check:package",
     "build": "rm -rf dist && node scripts/write-version.js && microbundle --tsconfig tsconfig.json --no-sourcemap",
     "prepublishOnly": "npm run build"
   },
@@ -28,7 +31,8 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "microbundle": "^0.15.1"
+    "microbundle": "^0.15.1",
+    "typescript": "^4.9.5"
   },
   "dependencies": {
     "eventemitter3": "^5.0.1",
