@@ -163,7 +163,7 @@ export class GatewayTransport implements Transport {
   // uplink regardless.
   public async takeOver(): Promise<void> {
     if (!this.pc) throw new Error("gateway transport not connected");
-    if (this.localStream) return; // already publishing (took over already)
+    if (this.localStream) return;
     if (!this.takingOver) {
       this.takingOver = this.doTakeOver(this.pc).finally(() => {
         this.takingOver = undefined;
@@ -172,7 +172,10 @@ export class GatewayTransport implements Transport {
     return this.takingOver;
   }
 
-  private async doTakeOver(pc: RTCPeerConnection): Promise<void> {
+  private async doTakeOver(
+    pc: RTCPeerConnection,
+    canRetry = true,
+  ): Promise<void> {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: this.micConstraints(),
     });
@@ -183,6 +186,7 @@ export class GatewayTransport implements Transport {
       .getTransceivers()
       .find((t) => t.direction === "recvonly");
     let addedSender: RTCRtpSender | undefined;
+    let retryable = false;
     try {
       if (audioTx) {
         await audioTx.sender.replaceTrack(track);
@@ -193,41 +197,51 @@ export class GatewayTransport implements Transport {
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const resp = await fetch(
-        `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
-        {
-          method: "PATCH",
-          headers: this.headers({ "Content-Type": "application/sdp" }),
-          body: pc.localDescription!.sdp,
-        },
-      );
-      if (!resp.ok) {
-        throw new Error(
-          `gateway take-over renegotiation failed: ${resp.status} ${await resp.text()}`,
+      let answer: string;
+      try {
+        const resp = await fetch(
+          `${this.base}/v1/webrtc/sessions/${this.sessionId}`,
+          {
+            method: "PATCH",
+            headers: this.headers({ "Content-Type": "application/sdp" }),
+            body: pc.localDescription!.sdp,
+          },
         );
+        retryable = resp.status >= 500 && resp.status < 600;
+        answer = await resp.text();
+        if (!resp.ok) {
+          throw new Error(
+            `gateway take-over renegotiation failed: ${resp.status} ${answer}`,
+          );
+        }
+      } catch (err) {
+        retryable = retryable || err instanceof TypeError;
+        throw err;
       }
+      retryable = false;
       await pc.setRemoteDescription({
         type: "answer",
-        sdp: await resp.text(),
+        sdp: answer,
       });
       if (this.pc !== pc) throw new Error("gateway transport closed");
     } catch (err) {
       stream.getTracks().forEach((t) => t.stop());
-      await this.undoTakeOver(pc, audioTx, addedSender);
+      const rolledBack = await this.undoTakeOver(pc, audioTx, addedSender);
+      if (canRetry && retryable && rolledBack && this.pc === pc) {
+        return this.doTakeOver(pc, false);
+      }
       throw err;
     }
-    // takeOver() reads a set localStream as "published", so set it last.
+    // Set localStream last because takeOver() treats localStream as a published microphone.
     this.localStream = stream;
   }
 
-  // Put the connection back the way the listener join left it, so that a
-  // retry renegotiates the same m-line.
   private async undoTakeOver(
     pc: RTCPeerConnection,
     audioTx: RTCRtpTransceiver | undefined,
     addedSender: RTCRtpSender | undefined,
-  ): Promise<void> {
-    if (pc.signalingState === "closed") return;
+  ): Promise<boolean> {
+    if (pc.signalingState === "closed") return false;
     try {
       if (pc.signalingState === "have-local-offer") {
         await pc.setLocalDescription({ type: "rollback" });
@@ -238,8 +252,10 @@ export class GatewayTransport implements Transport {
       } else if (addedSender) {
         pc.removeTrack(addedSender);
       }
+      return true;
     } catch (err) {
       console.error("gateway take-over rollback failed", err);
+      return false;
     }
   }
 
