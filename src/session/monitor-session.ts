@@ -193,6 +193,7 @@ export class MonitorSession extends CallSession {
 
     let tookOver = false;
     try {
+      if (this.ended) throw new Error("Session has ended");
       this.takeOverRequested = true;
       await this.api.takeOverLiveCall(this.callId, participantId, opts);
       tookOver = true;
