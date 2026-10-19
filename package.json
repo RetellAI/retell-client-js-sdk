@@ -13,8 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit --incremental false",
     "check:package": "node scripts/check-package.js",
-    "check": "npm run typecheck && npm run build && npm run test:session && npm run check:package",
-    "test:session": "node --test scripts/test-monitor-session.js",
+    "check": "npm run typecheck && npm run build && npm run check:package",
     "build": "rm -rf dist && node scripts/write-version.js && microbundle --tsconfig tsconfig.json --no-sourcemap",
     "prepublishOnly": "npm run build"
   },

@@ -206,9 +206,8 @@ instead.
 ## Development and releases
 
 Use Node.js 24, run `npm ci`, then `npm run check`. The checks typecheck the
-source, build all bundles, test monitor-session cancellation, install the packed
-tarball in a temporary project, and verify its CommonJS, ES module, UMD, and
-TypeScript entry points.
+source, build all bundles, install the packed tarball in a temporary project,
+and verify its CommonJS, ES module, UMD, and TypeScript entry points.
 CI runs these checks on PRs and pushes to `main`.
 
 [Release Please](https://github.com/googleapis/release-please) maintains a release
