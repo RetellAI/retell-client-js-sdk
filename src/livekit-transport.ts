@@ -109,9 +109,11 @@ export class LiveKitTransport implements Transport {
 
     await room.connect(this.config.url || LIVEKIT_HOST, this.config.accessToken);
     connected = true;
-    // A listener publishes nothing until takeOver().
+    // A listener publishes nothing until takeOver(). Awaited so a denied or
+    // missing mic rejects connect(), as getUserMedia does on the gateway,
+    // instead of leaving a live call that the agent cannot hear.
     if (!this.config.listener) {
-      room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true);
     }
     handlers.onConnected();
   }
