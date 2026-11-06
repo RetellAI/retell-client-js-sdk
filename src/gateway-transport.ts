@@ -187,8 +187,8 @@ export class GatewayTransport implements Transport {
     const deadline = Date.now() + WHIP_RETRY_WINDOW_MS;
     for (let attempt = 0; ; attempt++) {
       if (this.pc !== pc) throw new Error("gateway transport closed");
-      let resp: Response;
-      let body: string;
+      let resp: Response | undefined;
+      let body = "";
       try {
         ({ resp, body } = await this.request(
           this.base + "/v1/webrtc/sessions",
@@ -204,24 +204,22 @@ export class GatewayTransport implements Transport {
       } catch (err) {
         if (this.pc !== pc) throw new Error("gateway transport closed");
         if (!isNetworkError(err) || Date.now() >= deadline) throw err;
-        await retryDelay(attempt, deadline);
-        continue;
       }
       // 504 is left alone: the first POST may still be running on the gateway,
       // and landing after a retry it would displace the retry's session.
-      if ((resp.status === 502 || resp.status === 503) && Date.now() < deadline) {
-        await retryDelay(attempt, deadline);
-        continue;
+      // No `continue` after an await: microbundle's async transform drops it.
+      if (resp && !((resp.status === 502 || resp.status === 503) && Date.now() < deadline)) {
+        if (!resp.ok) {
+          throw new Error(`gateway WHIP POST failed: ${resp.status} ${body}`);
+        }
+        const answer = JSON.parse(body);
+        if (this.pc !== pc) {
+          this.deleteSession(answer.session_id);
+          throw new Error("gateway transport closed");
+        }
+        return answer;
       }
-      if (!resp.ok) {
-        throw new Error(`gateway WHIP POST failed: ${resp.status} ${body}`);
-      }
-      const answer = JSON.parse(body);
-      if (this.pc !== pc) {
-        this.deleteSession(answer.session_id);
-        throw new Error("gateway transport closed");
-      }
-      return answer;
+      await retryDelay(attempt, deadline);
     }
   }
 
