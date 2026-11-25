@@ -20,8 +20,7 @@ const WEB_CALL_IDENTITY = "client";
 // Signaling goes to Retell, which relays it to the gateway holding the call:
 // gateways answer on a private address, so a browser cannot reach one. Media does
 // not come back through here — it goes straight to whatever the SDP answer
-// advertises. Known the same way LIVEKIT_HOST is; `baseURL` overrides it for
-// local development.
+// advertises. `baseURL` overrides it for local development.
 const RETELL_API_HOST = "https://api.retellai.com";
 const WEBRTC_PROXY_PREFIX = "/webrtc-proxy";
 
@@ -138,7 +137,7 @@ export class GatewayTransport implements Transport {
     };
     // Before onConnected a failure surfaces as connect() rejecting; reporting
     // it as a disconnect as well would end the session before the error
-    // reaches anyone. Same rule as the LiveKit transport.
+    // reaches anyone.
     let connected = false;
     // Once media has flowed, a drop is recovered with an ICE restart rather than
     // ending the call; recover() reports the disconnect if that fails.
@@ -165,7 +164,7 @@ export class GatewayTransport implements Transport {
     this.sessionId = answer.session_id;
 
     // Before the answer: setRemoteDescription fires ontrack synchronously, and
-    // call_started must precede call_ready.
+    // onConnected must precede onCallReady.
     connected = true;
     handlers.onConnected();
 

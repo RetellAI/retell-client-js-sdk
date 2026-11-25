@@ -29,9 +29,7 @@ export interface CreateWebCallRequest {
 export interface CreateWebCallResponse {
   call_id: string;
   access_token: string;
-  // Missing on older backends, which are LiveKit-only.
   transport?: TransportKind;
-  url?: string;
   ice_servers?: RTCIceServer[];
   expires_at?: number;
 }
@@ -185,7 +183,7 @@ export interface CallEndedEvent {
   disconnection_reason?: DisconnectionReason;
 }
 
-// --- Data-channel events (LiveKit "server" participant / gateway control) ---
+// --- Data-channel events (gateway control channel) ---
 
 export interface UpdateEvent {
   event_type: "update";

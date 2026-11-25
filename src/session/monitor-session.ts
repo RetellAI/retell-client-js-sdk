@@ -135,11 +135,10 @@ export class MonitorSession extends CallSession {
     if (this.ended) throw new Error("Session has ended");
     await this.connectTransport({
       accessToken: resp.access_token,
-      transport: resp.transport ?? "livekit",
+      transport: resp.transport,
       listener: true,
       callId: this.callId,
       identity: resp.participant_id,
-      url: resp.url,
       iceServers: resp.ice_servers,
       baseURL: this.api.host,
       ...this.audio,
@@ -198,7 +197,7 @@ export class MonitorSession extends CallSession {
       await this.api.takeOverLiveCall(this.callId, participantId, opts);
       tookOver = true;
       const transport = this.transport;
-      if (this.ended || !transport?.takeOver) {
+      if (this.ended || !transport) {
         throw new Error("Call ended before take-over");
       }
       await transport.takeOver();

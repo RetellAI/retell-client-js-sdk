@@ -16,8 +16,3 @@ export { RetellApiError } from "./control/api";
 export type { RequestOptions } from "./control/api";
 export type { AnalyzerComponent, TransportKind } from "./transport";
 export * from "./types";
-
-// --- 2.x compatibility ---
-export { RetellWebClient } from "./legacy/retell-web-client";
-export type { RetellClientOptions } from "./legacy/retell-web-client";
-export type { StartCallConfig } from "./transport";

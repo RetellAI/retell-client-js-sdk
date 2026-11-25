@@ -2,13 +2,7 @@ import { EventEmitter } from "eventemitter3";
 import { ControlApi, RequestOptions, versionMessage } from "../control/api";
 import { MonitorSocket } from "../control/monitor-socket";
 import { GatewayTransport } from "../gateway-transport";
-import { LiveKitTransport } from "../livekit-transport";
-import {
-  AnalyzerComponent,
-  StartCallConfig,
-  Transport,
-  selectTransport,
-} from "../transport";
+import { AnalyzerComponent, StartCallConfig, Transport } from "../transport";
 import {
   CallEndedEvent,
   LiveCallNodeTransition,
@@ -133,14 +127,14 @@ export abstract class CallSession extends EventEmitter<SessionEventMap> {
   }
 
   protected async connectTransport(config: StartCallConfig): Promise<void> {
-    const kind = selectTransport(config, "livekit");
-    const transport =
-      kind === "gateway"
-        ? new GatewayTransport(config)
-        : new LiveKitTransport(config);
+    if (config.transport !== "gateway") {
+      throw new Error(
+        `This call runs on transport "${config.transport}", which retell-client-js-sdk 4.x does not support; LiveKit calls need 3.x`,
+      );
+    }
+    const transport = new GatewayTransport(config);
     this.transport = transport;
-    // A transport we already dropped may still report (LiveKit emits
-    // Disconnected from its own disconnect()); only the current one counts.
+    // A transport we already dropped may still report; only the current one counts.
     const current = () => this.transport === transport;
     try {
       await transport.connect({
