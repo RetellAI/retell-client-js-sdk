@@ -11,7 +11,8 @@ async function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "retell-sdk-package-"));
   try {
     const [packed] = JSON.parse(execFileSync("npm", [
-      "pack", "--json", "--pack-destination", temp,
+      // Packs the dist `npm run check` just built instead of letting prepare rebuild it.
+      "pack", "--json", "--ignore-scripts", "--pack-destination", temp,
     ], { cwd: root, encoding: "utf8" }));
     const pkg = require(path.join(root, "package.json"));
     const files = new Set(packed.files.map((file) => file.path));
