@@ -11,7 +11,8 @@ async function main() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "retell-sdk-package-"));
   try {
     const [packed] = JSON.parse(execFileSync("npm", [
-      "pack", "--json", "--pack-destination", temp,
+      // Packs the dist `npm run check` just built instead of letting prepare rebuild it.
+      "pack", "--json", "--ignore-scripts", "--pack-destination", temp,
     ], { cwd: root, encoding: "utf8" }));
     const pkg = require(path.join(root, "package.json"));
     const files = new Set(packed.files.map((file) => file.path));
@@ -24,10 +25,15 @@ async function main() {
       "--no-audit", "--no-fund", "--package-lock=false",
     ], { cwd: temp, stdio: "inherit" });
     const installed = path.join(temp, "node_modules", pkg.name);
+    assert.ok(!fs.existsSync(path.join(temp, "node_modules", "livekit-client")), "livekit-client was installed");
+    for (const file of files) {
+      if (!/^dist\/.*\.js$/.test(file)) continue;
+      const code = fs.readFileSync(path.join(installed, file), "utf8");
+      assert.ok(!code.includes("livekit-client"), `${file} references livekit-client`);
+    }
     const cjs = require(installed);
     const exportedClasses = [
-      "RetellClient", "RetellWebClient", "CallSession",
-      "WebCallSession", "MonitorSession", "RetellApiError",
+      "RetellClient", "CallSession", "WebCallSession", "MonitorSession", "RetellApiError",
     ];
     const esmPath = path.join(installed, "dist", "package-check.mjs");
     fs.copyFileSync(path.join(installed, pkg.module), esmPath);
@@ -36,7 +42,6 @@ async function main() {
       TextDecoder,
       TextEncoder,
       eventemitter3: require(path.join(temp, "node_modules", "eventemitter3")),
-      livekitClient: require(path.join(temp, "node_modules", "livekit-client")),
     };
     vm.runInNewContext(fs.readFileSync(path.join(installed, pkg.unpkg), "utf8"), sandbox, {
       filename: pkg.unpkg,
@@ -64,13 +69,27 @@ async function main() {
       await client.stopCall("call_package_check");
       assert.equal(requests, 1, `${format} did not use the configured fetch`);
     }
+    // A LiveKit call is refused before any connection, and take-over never reaches the backend.
+    const takeOverRequests = [];
+    const livekitCall = new cjs.RetellClient({
+      key: "public_key_package_check",
+      fetch: async (url) => {
+        if (String(url).includes("take-over")) takeOverRequests.push(url);
+        return new Response(JSON.stringify({
+          transport: "livekit", access_token: "token", participant_id: "listener",
+        }), { status: 200 });
+      },
+    }).monitorCall({ call_id: "call_package_check", transcript: false });
+    await assert.rejects(livekitCall.listen(), /does not support/);
+    await assert.rejects(livekitCall.takeOver(), /does not support/);
+    assert.equal(livekitCall.status, "monitoring", "a refused LiveKit call changed the session");
+    assert.equal(takeOverRequests.length, 0, "take-over was sent for a LiveKit call");
     fs.writeFileSync(path.join(temp, "consumer.ts"), `
-import { RetellClient, RetellWebClient, MonitorSession, WebCallSession } from "${pkg.name}";
+import { RetellClient, MonitorSession, WebCallSession } from "${pkg.name}";
 const client = new RetellClient({ key: "public_key_package_check" });
 const monitor: MonitorSession = client.monitorCall({ call_id: "call_package_check" });
 const call: WebCallSession = client.createWebCall({ agent_id: "agent_package_check" });
-const legacy = new RetellWebClient();
-void [monitor, call, legacy];
+void [monitor, call];
 `);
     execFileSync(process.execPath, [
       require.resolve("typescript/bin/tsc"), "--noEmit", "--strict",

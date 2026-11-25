@@ -59,7 +59,6 @@ export class WebCallSession extends CallSession {
         accessToken: resp.access_token,
         transport: resp.transport,
         callId: resp.call_id,
-        url: resp.url,
         iceServers: resp.ice_servers,
         baseURL: this.api.host,
         ...audio,

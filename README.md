@@ -113,6 +113,9 @@ is the session with nothing else called; `transcript: false` drops it for an
 audio-only one.
 `listen()` needs a user gesture (autoplay), and `takeOver()` asks for the
 microphone before it silences the AI — a denied prompt leaves the call as it was.
+Both need a call whose audio runs on Retell's gateway. On a call that still runs
+on LiveKit (many phone calls today) they reject before anything changes; the
+transcript, `update()` and `end()` work on any call.
 
 Monitoring needs a wider key than a web call does, so keep it somewhere you
 control: a public key with tight allowed domains and reCAPTCHA, a page behind
@@ -189,19 +192,24 @@ await client.stopCall(callId);
 await client.updateLiveCall(callId, { fields_to_override: { metadata: {...} } });
 ```
 
-## Migrating from 2.x
+## Migrating to 4.0
 
-`RetellWebClient` still ships and works unchanged (`startCall({ accessToken })`,
-`stopCall()`, the same events), so 2.x code keeps running. It is deprecated
-and will be removed in 4.0: `RetellClient.createWebCall()` replaces the
-create-web-call request plus `startCall`, and `monitorCall()` replaces
-hand-rolled live-listen / take-over flows.
+4.0 connects audio only to calls on Retell's gateway (every call
+`/v3/create-web-call` creates, and phone calls routed there) and drops
+`livekit-client` from the bundle.
 
-One behavioural difference to plan for: 2.x calls emitted
-`agent_start_talking`, `agent_stop_talking`, `update` and `metadata`; the calls
-`createWebCall()` creates do not. A page that drove a talking indicator or read
-`update.transcript` wants `transcript: true` and the transcript events
-instead.
+- `RetellWebClient` is gone. `RetellClient.createWebCall()` replaces the
+  create-web-call request plus `startCall()`, and `monitorCall()` replaces
+  hand-rolled live-listen / take-over flows. Tokens from `/v2/create-web-call`
+  are LiveKit tokens, so they no longer work.
+- `listen()` and `takeOver()` on a call whose audio runs on LiveKit reject with
+  an error that names the transport. Stay on 3.x if you need audio from those
+  calls.
+
+2.x calls emitted `agent_start_talking`, `agent_stop_talking`, `update` and
+`metadata`; the calls `createWebCall()` creates do not. A page that drove a
+talking indicator or read `update.transcript` wants `transcript: true` and the
+transcript events instead.
 
 ## Development and releases
 
